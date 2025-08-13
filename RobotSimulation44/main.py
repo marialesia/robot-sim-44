@@ -1,13 +1,14 @@
+# main.py
 import sys
-import PyQt5
-import matplotlib
-import pandas
-import numpy
-from PyQt5.QtWidgets import QApplication, QLabel
+from PyQt5.QtWidgets import QApplication
+from main_interface.unified_interface import UnifiedInterface
 
-app = QApplication(sys.argv)
-window = QLabel("Hello World!")
-print("All imports successful!")
-window.show()
-sys.exit(app.exec_())
+def main():
+    app = QApplication(sys.argv)
+    window = UnifiedInterface()
+    window.show()
+    sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    main()
 
