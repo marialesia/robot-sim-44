@@ -189,8 +189,6 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePoli
 from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
 from PyQt5.QtCore import Qt, QPointF, QRectF
 
-# ... keep ConveyorBeltWidget, RobotArmWidget, StorageContainerWidget exactly as you have ...
-
 class BaseTask(QWidget):
     """
     One task’s scene with three widgets (conveyor, arm, container).
@@ -221,7 +219,10 @@ class BaseTask(QWidget):
             "border: 2px solid #444; border-radius: 8px; "
             "background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #f7f7f9, stop:1 #e6e6ea); }"
         )
-        self.scene.setFixedHeight(420)
+        
+        self.scene.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.scene.setMinimumSize(600, 400)
+        self.scene.setMaximumSize(1200, 400) 
         outer.addWidget(self.scene)
 
         # ---- Grid layout for flexible placement ----
@@ -249,7 +250,7 @@ class BaseTask(QWidget):
         self.grid.setRowStretch(0, 0)
         self.grid.setRowStretch(1, 1)
 
-    # --------- Per-task placement API (no fancy typing, 3.8+ safe) ----------
+    # --------- Per-task placement API  ----------
     def set_positions(
         self,
         conveyor=None,   # dict: {row, col, rowSpan=1, colSpan=1, align=Qt.Align...}
