@@ -1,6 +1,25 @@
-# tasks/packaging_task.py
+from PyQt5.QtGui import QColor
+from PyQt5.QtCore import Qt
 from .base_task import BaseTask
 
 class PackagingTask(BaseTask):
     def __init__(self):
         super().__init__(task_name="Packaging")
+
+        self.arm.shoulder_angle = -80
+        self.arm.elbow_angle = 10
+        self.arm.c_arm = QColor("#8e44ad")
+        self.arm.c_arm_dark = QColor("#6d2e8a")
+
+        self.container.border = QColor("#c76a1a")
+        self.container.fill_top = QColor("#ffe9d3")
+        self.container.fill_bottom = QColor("#ffd9b5")
+        self.container.rib = QColor(199, 106, 26, 110)
+
+        # Positions (container left, arm right)
+        self.set_positions(
+            conveyor=dict(row=0, col=0, colSpan=2, align=Qt.AlignTop),
+            arm=dict(row=0, col=0, colSpan=3, align=Qt.AlignHCenter | Qt.AlignBottom),
+            container=dict(row=1, col=0, align=Qt.AlignLeft  | Qt.AlignBottom),
+            col_stretch=[1, 1], row_stretch=[0, 1]
+        )
