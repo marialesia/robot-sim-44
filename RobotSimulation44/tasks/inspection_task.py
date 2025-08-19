@@ -25,7 +25,7 @@ class InspectionTask(BaseTask):
     # ===== Called by existing GUI (LayoutController.start_tasks/stop_tasks) =====
     def start(self):
         # Positive = left > right
-        self.conveyor.setBeltSpeed(120)
+        self.conveyor.setBeltSpeed(60) # Can change this when determining Easy/Medium/Hard Configs?
         self.conveyor.enable_motion(True)
 
     def stop(self):
