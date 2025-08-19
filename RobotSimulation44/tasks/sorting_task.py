@@ -55,3 +55,12 @@ class SortingTask(BaseTask):
         self.container_left.update()
         self.container.update()
         self.container_right.update()
+
+    # ===== Called by existing GUI (LayoutController.start_tasks/stop_tasks) =====
+    def start(self):
+        # Positive = left > right
+        self.conveyor.setBeltSpeed(120)
+        self.conveyor.enable_motion(True)
+
+    def stop(self):
+        self.conveyor.enable_motion(False)

@@ -1,7 +1,7 @@
 ﻿# tasks/base_task.py
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout
 from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
-from PyQt5.QtCore import Qt, QPointF, QRectF
+from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer, pyqtProperty
 
 
 # --- Conveyor ---------------------------------------------------------------
@@ -9,14 +9,14 @@ from PyQt5.QtCore import Qt, QPointF, QRectF
 class ConveyorBeltWidget(QWidget):
     """
     Realistic conveyor with rollers, belt gradient, treads, and rails.
-    Per-instance colours so each task can override in code.
+    Now includes a lightweight, non-blocking tread animation.
     """
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(220, 120)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # fill horizontally
 
-        # Per-instance palette (override these in each task subclass)
+        # Per-instance palette
         self.roller_pen  = QColor(40, 40, 40)
         self.roller_fill = QColor(70, 70, 72)
         self.belt_top    = QColor(45, 45, 47)
@@ -24,6 +24,32 @@ class ConveyorBeltWidget(QWidget):
         self.belt_bot    = QColor(50, 50, 52)
         self.rail        = QColor(120, 120, 122)
         self.tread       = QColor(90, 90, 92, 180)
+
+        # --- animation state ---
+        self._belt_speed = 0.0      # pixels/second; + = move RIGHT
+        self._tread_phase = 0.0     # accumulates over time
+        self._belt_timer = QTimer(self)
+        self._belt_timer.timeout.connect(self._tick_belt)
+        # left stopped by default; call enable_motion(True) + setBeltSpeed(...)
+
+    def enable_motion(self, enable: bool):
+        """Start/stop the belt tread animation timer."""
+        if enable and not self._belt_timer.isActive():
+            self._belt_timer.start(16)  # ~60 FPS
+        elif not enable and self._belt_timer.isActive():
+            self._belt_timer.stop()
+
+    def _tick_belt(self):
+        dt = 0.016
+        self._tread_phase = (self._tread_phase + self._belt_speed * dt) % 1000.0
+        self.update()
+
+    @pyqtProperty(float)
+    def beltSpeed(self):
+        return self._belt_speed
+
+    def setBeltSpeed(self, v: float):
+        self._belt_speed = float(v)
 
     def paintEvent(self, e):
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
@@ -37,7 +63,7 @@ class ConveyorBeltWidget(QWidget):
         p.drawEllipse(QPointF(margin + roller_r, h/2), roller_r, roller_r)
         p.drawEllipse(QPointF(w - margin - roller_r, h/2), roller_r, roller_r)
 
-        # Belt
+        # Belt body
         belt_height = max(28, int(h*0.38))
         belt_top = (h - belt_height) / 2
         grad = QLinearGradient(0, belt_top, 0, belt_top + belt_height)
@@ -48,10 +74,13 @@ class ConveyorBeltWidget(QWidget):
         p.setPen(QPen(QColor(20,20,20), 2))
         p.drawRoundedRect(QRectF(margin, belt_top, w - 2*margin, belt_height), 8, 8)
 
-        # Tread
+        # Treads — phase shifts RIGHT as _tread_phase increases
         p.setPen(QPen(self.tread, 1.2))
         step = 12
-        for x in range(int(margin + 6), int(w - margin), step):
+        phase = self._tread_phase % step
+        # start slightly before the left edge to avoid gaps
+        start_x = int(margin + 6 + phase - step)
+        for x in range(start_x, int(w - margin), step):
             p.drawLine(x, belt_top + 4, x - 10, belt_top + belt_height - 4)
 
         # Rails + bolts
@@ -63,6 +92,7 @@ class ConveyorBeltWidget(QWidget):
         for x in range(int(margin + 10), int(w - margin - 10), bolt_step):
             p.drawEllipse(QPointF(x, belt_top - 6), 1.8, 1.8)
             p.drawEllipse(QPointF(x, belt_top + belt_height + 6), 1.8, 1.8)
+
 
 
 # --- Robot Arm --------------------------------------------------------------

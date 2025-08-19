@@ -23,3 +23,12 @@ class PackagingTask(BaseTask):
             container=dict(row=1, col=0, align=Qt.AlignLeft  | Qt.AlignBottom),
             col_stretch=[1, 1], row_stretch=[0, 1]
         )
+    
+    # ===== Called by existing GUI (LayoutController.start_tasks/stop_tasks) =====
+    def start(self):
+        # Positive = left > right
+        self.conveyor.setBeltSpeed(120)
+        self.conveyor.enable_motion(True)
+
+    def stop(self):
+        self.conveyor.enable_motion(False)

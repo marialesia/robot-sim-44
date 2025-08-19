@@ -21,3 +21,12 @@ class InspectionTask(BaseTask):
             container=dict(row=1, col=1, align=Qt.AlignHCenter | Qt.AlignVCenter),
             col_stretch=[1, 1], row_stretch=[0, 1], spacing=24
         )
+    
+    # ===== Called by existing GUI (LayoutController.start_tasks/stop_tasks) =====
+    def start(self):
+        # Positive = left > right
+        self.conveyor.setBeltSpeed(120)
+        self.conveyor.enable_motion(True)
+
+    def stop(self):
+        self.conveyor.enable_motion(False)
