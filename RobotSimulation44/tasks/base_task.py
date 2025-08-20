@@ -33,6 +33,7 @@ class ConveyorBeltWidget(QWidget):
 
         # --- moving boxes ---
         self._boxes = []            # list of x positions (float)
+        self._box_colors = []       # empty list for various colours of boxes
         self._box_inset = 12        # keep boxes inside belt edges
         self._box_size = 14         # square box size in px
         self._box_color = QColor(200, 40, 40)
@@ -53,11 +54,19 @@ class ConveyorBeltWidget(QWidget):
         self._belt_speed = float(v)
 
     def spawn_box(self):
-        """Spawn a small red box at the left edge of the belt."""
-        # Place just inside the left margin + inset
+        """Spawn a small box at the left edge; color is random (red/green/blue/or more)."""
+        import random  # keep import local to avoid changing global imports
         x0 = 12 + self._box_inset
         self._boxes.append(float(x0))
+        self._box_colors.append(
+            random.choice([
+                QColor(200, 40, 40),   # red
+                QColor(31, 122, 58),   # green
+                QColor(43, 74, 145),   # blue
+            ])
+        )
         self.update()
+
 
     # Internals ---------------------------------------------------------------
     def _tick_belt(self):
@@ -69,15 +78,17 @@ class ConveyorBeltWidget(QWidget):
             dx = self._belt_speed * dt
             w = self.width()
             right_limit = w - 12 - self._box_inset - self._box_size
-            next_boxes = []
-            for x in self._boxes:
+            next_boxes, next_colors = [], []
+            for x, c in zip(self._boxes, self._box_colors):
                 x2 = x + dx
                 if x2 <= right_limit:
                     next_boxes.append(x2)
+                    next_colors.append(c)
             self._boxes = next_boxes
+            self._box_colors = next_colors
 
         self.update()
-
+    
     def paintEvent(self, e):
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
@@ -112,12 +123,12 @@ class ConveyorBeltWidget(QWidget):
 
         # Boxes (draw on belt, under rails)
         if self._boxes:
-            p.setPen(QPen(QColor(60, 0, 0), 1))
-            p.setBrush(QBrush(self._box_color))
             box_h = min(self._box_size, max(8, belt_height - 8))
             box_w = box_h
             y = belt_top + (belt_height - box_h)/2
-            for x in self._boxes:
+            for x, c in zip(self._boxes, self._box_colors):
+                p.setPen(QPen(c.darker(200), 1))
+                p.setBrush(QBrush(c))
                 p.drawRoundedRect(QRectF(x, y, box_w, box_h), 3, 3)
 
         # Rails + bolts (on top)
