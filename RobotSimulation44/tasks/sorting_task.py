@@ -188,7 +188,7 @@ class SortingTask(BaseTask):
         boxes = getattr(self.conveyor, "_boxes", None)
         if not boxes:
             return False
-        grip_x = self.conveyor.width() * 0.5  # center over belt; adjust if your gripper is offset
+        grip_x = self.conveyor.width() * 0.44  # center over belt; adjust if the gripper is offset (not touching the box)
         w = self._touch_window_px
         # Trigger if any box center is inside [grip_x - w, grip_x + w]
         for x in boxes:
