@@ -117,7 +117,7 @@ class ConveyorBeltWidget(QWidget):
         step = 12
         phase = self._tread_phase % step
         # Inset so lines don't hang over the rounded ends
-        start_x = int(margin + 16 + phase - step)  # 16 = 6 + slant(10)
+        start_x = int(margin + 25 + phase - step)
         for x in range(start_x, int(w - margin), step):
             p.drawLine(x, belt_top + 4, x - 10, belt_top + belt_height - 4)
 

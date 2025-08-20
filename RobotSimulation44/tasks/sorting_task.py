@@ -72,6 +72,12 @@ class SortingTask(BaseTask):
         self._pick_from = (self.arm.shoulder_angle, self.arm.elbow_angle)
         self._pick_to = (self.arm.shoulder_angle, self.arm.elbow_angle)
 
+        # --- Trigger settings to touch every box ---
+        self._now_ms = 0
+        self._last_touch_time_ms = -10000
+        self._touch_window_px = 18      # how close a box must be to the gripper (horizontally)
+        self._touch_cooldown_ms = 120   # min time between triggers (prevents double-trigger on one box)
+
     # ===== Called by your existing GUI =====
     def start(self):
         # belt motion
@@ -82,13 +88,18 @@ class SortingTask(BaseTask):
         if not self._box_timer.isActive():
             self._box_timer.start(800)    # one box every 0.8s
 
-        # start arm pick cycle
+        # reset trigger state so we can fire immediately after a Stop
+        self._now_ms = 0
+        self._last_touch_time_ms = -10000
+        self._pick_state = "idle"
+        self._pick_t = 0
+
+        # start arm pick monitor
         if not self._pick_timer.isActive():
-            # reset to home and begin cycle
             sh, el = self._pose_home()
             self._set_arm(sh, el)
-            self._pick_state = "idle"
             self._pick_timer.start()
+
 
     def stop(self):
         self.conveyor.enable_motion(False)
@@ -129,13 +140,19 @@ class SortingTask(BaseTask):
         self._pick_t = 0
 
     def _tick_pick(self):
-        # kick off a cycle if idle
-        if self._pick_state == "idle":
-            self._pick_state = "to_prep"
-            self._start_seg(self._pose_prep(), 400)
-            return
+        # global time
+        self._now_ms += self._pick_timer.interval()
 
-        # advance interpolation
+        # If idle, only start a cycle when a box is near the gripper
+        if self._pick_state == "idle":
+            if self._box_near_grip() and (self._now_ms - self._last_touch_time_ms) >= self._touch_cooldown_ms:
+                self._last_touch_time_ms = self._now_ms
+                self._pick_state = "to_prep"
+                self._start_seg(self._pose_prep(), 120)  # fast move
+            else:
+                return
+
+        # advance interpolation for non-idle states
         self._pick_t += self._pick_timer.interval()
         t = min(1.0, self._pick_t / float(self._pick_duration))
         s0, e0 = self._pick_from
@@ -144,24 +161,37 @@ class SortingTask(BaseTask):
         e = e0 + (e1 - e0) * t
         self._set_arm(s, e)
 
-        # segment complete -> next state
+        # segment complete -> next state (fast timings; same angles)
         if t >= 1.0:
             if self._pick_state == "to_prep":
                 self._pick_state = "descend"
-                self._start_seg(self._pose_pick(), 350)
+                self._start_seg(self._pose_pick(), 120)
             elif self._pick_state == "descend":
                 self._pick_state = "hold"
-                # hold at pick pose briefly (from == to keeps arm still)
-                self._start_seg(self._pose_pick(), 220)
+                self._start_seg(self._pose_pick(), 40)     # brief touch
             elif self._pick_state == "hold":
                 self._pick_state = "lift"
-                self._start_seg(self._pose_lift(), 350)
+                self._start_seg(self._pose_lift(), 120)
             elif self._pick_state == "lift":
                 self._pick_state = "return"
-                self._start_seg(self._pose_home(), 500)
+                self._start_seg(self._pose_home(), 160)
             elif self._pick_state == "return":
-                # brief idle before next pick
+                # brief idle before next box trigger
                 self._pick_state = "idle_pause"
-                self._start_seg(self._pose_home(), 300)
+                self._start_seg(self._pose_home(), 40)
             elif self._pick_state == "idle_pause":
                 self._pick_state = "idle"
+
+    # ---------- helpers ----------
+    def _box_near_grip(self):
+        """Returns True if any box is within a small window around the gripper's x-position."""
+        boxes = getattr(self.conveyor, "_boxes", None)
+        if not boxes:
+            return False
+        grip_x = self.conveyor.width() * 0.5  # center over belt; adjust if your gripper is offset
+        w = self._touch_window_px
+        # Trigger if any box center is inside [grip_x - w, grip_x + w]
+        for x in boxes:
+            if (grip_x - w) <= x <= (grip_x + w):
+                return True
+        return False
