@@ -1,6 +1,6 @@
 ﻿# tasks/sorting_task.py
 from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from .base_task import BaseTask, StorageContainerWidget
 
 class SortingTask(BaseTask):
@@ -56,11 +56,21 @@ class SortingTask(BaseTask):
         self.container.update()
         self.container_right.update()
 
-    # ===== Called by existing GUI (LayoutController.start_tasks/stop_tasks) =====
+        # Spawn timer (created but not started until Start is pressed)
+        self._box_timer = QTimer(self)
+        self._box_timer.timeout.connect(self.conveyor.spawn_box)
+
+    # ===== Called by your existing GUI =====
     def start(self):
-        # Positive = left > right
-        self.conveyor.setBeltSpeed(60) # Can change this when determining Easy/Medium/Hard Configs?
+        # belt motion
+        self.conveyor.setBeltSpeed(120)   # left -> right
         self.conveyor.enable_motion(True)
+
+        # start spawning boxes periodically
+        if not self._box_timer.isActive():
+            self._box_timer.start(800)    # one box every 0.8s
 
     def stop(self):
         self.conveyor.enable_motion(False)
+        if self._box_timer.isActive():
+            self._box_timer.stop()

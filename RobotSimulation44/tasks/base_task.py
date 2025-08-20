@@ -9,7 +9,7 @@ from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer, pyqtProperty
 class ConveyorBeltWidget(QWidget):
     """
     Realistic conveyor with rollers, belt gradient, treads, and rails.
-    Now includes a lightweight, non-blocking tread animation.
+    Now includes a lightweight, non-blocking tread animation + small red boxes.
     """
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -30,19 +30,20 @@ class ConveyorBeltWidget(QWidget):
         self._tread_phase = 0.0     # accumulates over time
         self._belt_timer = QTimer(self)
         self._belt_timer.timeout.connect(self._tick_belt)
-        # left stopped by default; call enable_motion(True) + setBeltSpeed(...)
 
+        # --- moving boxes ---
+        self._boxes = []            # list of x positions (float)
+        self._box_inset = 12        # keep boxes inside belt edges
+        self._box_size = 14         # square box size in px
+        self._box_color = QColor(200, 40, 40)
+
+    # Public API --------------------------------------------------------------
     def enable_motion(self, enable: bool):
-        """Start/stop the belt tread animation timer."""
+        """Start/stop the belt tread & box animation timer."""
         if enable and not self._belt_timer.isActive():
             self._belt_timer.start(16)  # ~60 FPS
         elif not enable and self._belt_timer.isActive():
             self._belt_timer.stop()
-
-    def _tick_belt(self):
-        dt = 0.016
-        self._tread_phase = (self._tread_phase + self._belt_speed * dt) % 1000.0
-        self.update()
 
     @pyqtProperty(float)
     def beltSpeed(self):
@@ -50,6 +51,32 @@ class ConveyorBeltWidget(QWidget):
 
     def setBeltSpeed(self, v: float):
         self._belt_speed = float(v)
+
+    def spawn_box(self):
+        """Spawn a small red box at the left edge of the belt."""
+        # Place just inside the left margin + inset
+        x0 = 12 + self._box_inset
+        self._boxes.append(float(x0))
+        self.update()
+
+    # Internals ---------------------------------------------------------------
+    def _tick_belt(self):
+        dt = 0.016
+        self._tread_phase = (self._tread_phase + self._belt_speed * dt) % 1000.0
+
+        # advance boxes
+        if self._boxes:
+            dx = self._belt_speed * dt
+            w = self.width()
+            right_limit = w - 12 - self._box_inset - self._box_size
+            next_boxes = []
+            for x in self._boxes:
+                x2 = x + dx
+                if x2 <= right_limit:
+                    next_boxes.append(x2)
+            self._boxes = next_boxes
+
+        self.update()
 
     def paintEvent(self, e):
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
@@ -74,17 +101,28 @@ class ConveyorBeltWidget(QWidget):
         p.setPen(QPen(QColor(20,20,20), 2))
         p.drawRoundedRect(QRectF(margin, belt_top, w - 2*margin, belt_height), 8, 8)
 
-        # Treads — phase shifts RIGHT as _tread_phase increases
+        # Treads (animated)
         p.setPen(QPen(self.tread, 1.2))
         step = 12
         phase = self._tread_phase % step
-        # start slightly before the left edge to avoid gaps
-        start_x = int(margin + 25 + phase - step)
+        # Inset so lines don't hang over the rounded ends
+        start_x = int(margin + 16 + phase - step)  # 16 = 6 + slant(10)
         for x in range(start_x, int(w - margin), step):
             p.drawLine(x, belt_top + 4, x - 10, belt_top + belt_height - 4)
 
-        # Rails + bolts
+        # Boxes (draw on belt, under rails)
+        if self._boxes:
+            p.setPen(QPen(QColor(60, 0, 0), 1))
+            p.setBrush(QBrush(self._box_color))
+            box_h = min(self._box_size, max(8, belt_height - 8))
+            box_w = box_h
+            y = belt_top + (belt_height - box_h)/2
+            for x in self._boxes:
+                p.drawRoundedRect(QRectF(x, y, box_w, box_h), 3, 3)
+
+        # Rails + bolts (on top)
         rail_pen = QPen(self.rail, 2); p.setPen(rail_pen)
+        p.setBrush(Qt.NoBrush)
         p.drawLine(margin + 4, belt_top - 6, w - margin - 4, belt_top - 6)
         p.drawLine(margin + 4, belt_top + belt_height + 6, w - margin - 4, belt_top + belt_height + 6)
         p.setBrush(QBrush(QColor(160,160,165))); p.setPen(Qt.NoPen)
@@ -92,6 +130,7 @@ class ConveyorBeltWidget(QWidget):
         for x in range(int(margin + 10), int(w - margin - 10), bolt_step):
             p.drawEllipse(QPointF(x, belt_top - 6), 1.8, 1.8)
             p.drawEllipse(QPointF(x, belt_top + belt_height + 6), 1.8, 1.8)
+
 
 
 
