@@ -8,8 +8,8 @@ class SortingTask(BaseTask):
         super().__init__(task_name="Sorting")
 
         # ---- Robot arm visuals ----
-        self.arm.shoulder_angle = -95
-        self.arm.elbow_angle = -5
+        self.arm.shoulder_angle = -90
+        self.arm.elbow_angle = -0
         self.arm.c_arm = QColor("#3f88ff")
         self.arm.c_arm_dark = QColor("#2f6cc9")
 
@@ -102,8 +102,8 @@ class SortingTask(BaseTask):
 
     # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> return) ----------
     def _pose_home(self):
-        # your initial pose
-        return (-95.0, -5.0)
+        # initial pose
+        return (-90.0, -0.0)
 
     def _pose_prep(self):
         # slight move over belt before descending
@@ -111,7 +111,7 @@ class SortingTask(BaseTask):
 
     def _pose_pick(self):
         # descend to "grip" height over belt
-        return (-100.0, -30.0)
+        return (-110.0, -95.0)
 
     def _pose_lift(self):
         # lift a bit as if carrying

@@ -159,7 +159,7 @@ class RobotArmWidget(QWidget):
 
         # Pose (can be overridden per task)
         self.shoulder_angle = -90.0
-        self.elbow_angle = -12.0
+        self.elbow_angle = -0.0
 
         # Palette (can be overridden per task)
         self.c_arm = QColor(70, 120, 180)
