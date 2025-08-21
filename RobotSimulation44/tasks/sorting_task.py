@@ -2,79 +2,9 @@
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer
 from .base_task import BaseTask, StorageContainerWidget
+from .sorting_logic import SortingWorker
 
-# Worker class to run the sorting logic in a separate thread
-class SortingWorker(QThread):
-    metrics_ready = pyqtSignal(dict)
-
-    def __init__(self, pace, bin_count, error_rate, color_options, pace_map, num_boxes=10):
-        super().__init__()
-        self.pace = pace
-        self.bin_count = bin_count
-        self.error_rate = error_rate
-        self.color_options = color_options
-        self.pace_map = pace_map
-        self.num_boxes = num_boxes #this is for debugging
-        self._running = True
-
-        # Metrics
-        self.total_items = 0
-        self.correct_items = 0
-        self.error_items = 0
-
-    def run(self):
-        print(f"Starting Sorting Task ({self.num_boxes} boxes)...")
-        self.start_time = time.time()
-
-        for box_num in range(1, self.num_boxes + 1):
-            if not self._running:
-                break
-
-            current_box = random.choice(self.color_options)
-            print(f"[Box {box_num}] New box spawned: {current_box.upper()}")
-            self.total_items += 1
-
-            if random.random() < self.error_rate:
-                wrong_bin = random.choice([c for c in self.color_options if c != current_box])
-                print(f"ERROR: Sent to {wrong_bin.upper()} bin instead of {current_box.upper()}!")
-                self.error_items += 1
-
-                corrected_bin = input(
-                    f"Where should this {current_box.upper()} box go? Options: {', '.join(self.color_options)}\n> "
-                ).strip().lower()
-                if corrected_bin == current_box:
-                    print(f"Corrected! Box placed in {corrected_bin.upper()} bin.")
-                    self.correct_items += 1
-                else:
-                    print(f"Wrong correction.")
-            else:
-                print(f"Box placed in {current_box.upper()} bin.")
-                self.correct_items += 1
-
-            delay_range = self.pace_map[self.pace]
-            time.sleep(random.uniform(*delay_range))
-
-        self._print_metrics()
-
-    def _print_metrics(self):
-        elapsed_time = time.time() - self.start_time
-        accuracy = (self.correct_items / self.total_items) * 100 if self.total_items > 0 else 0
-        items_per_minute = (self.total_items / elapsed_time) * 60 if elapsed_time > 0 else 0
-        observed_error_rate = (self.error_items / self.total_items) * 100 if self.total_items > 0 else 0
-
-        print("\nSORTING METRICS")
-        print(f"Total items sorted: {self.total_items}")
-        print(f"Correctly sorted:   {self.correct_items}")
-        print(f"Errors made:        {self.error_items}")
-        print(f"Accuracy:           {accuracy:.2f}%")
-        print(f"Items per minute:   {items_per_minute:.2f}")
-        print(f"Observed error rate:{observed_error_rate:.2f}%")
-
-    def stop(self):
-        self._running = False
-
-
-class SortingTask(BaseTask, QWidget):
+class SortingTask(BaseTask):
     def __init__(self):
         super().__init__(task_name="Sorting")
 
@@ -159,10 +89,6 @@ class SortingTask(BaseTask, QWidget):
         self.container_orange.update()
         self.container_teal.update()
 
-        # ===== Existing box spawner (created but not started until Start) =====
-        self._box_timer = QTimer(self)
-        self._box_timer.timeout.connect(self.conveyor.spawn_box)
-
         # ===== Arm "touch every box" animation (timer-driven) =====
         self._pick_timer = QTimer(self)
         self._pick_timer.setInterval(16)  # ~60 FPS
@@ -184,15 +110,14 @@ class SortingTask(BaseTask, QWidget):
         # --- Despawn offset (independent of detection) ---
         self._despawn_offset_px = 24  # +pixels to the RIGHT of detection; increase = disappears later
 
+        # ---- Worker will be created on Start ----
+        self.worker = None
+
     # ===== Called by your existing GUI =====
     def start(self):
         # belt motion
         self.conveyor.setBeltSpeed(120)   # left -> right
         self.conveyor.enable_motion(True)
-
-        # start spawning boxes periodically
-        if not self._box_timer.isActive():
-            self._box_timer.start(800)    # one box every 0.8s
 
         # reset trigger state so we can fire immediately after a Stop
         self._now_ms = 0
@@ -206,15 +131,29 @@ class SortingTask(BaseTask, QWidget):
             self._set_arm(sh, el)
             self._pick_timer.start()
 
+        # ===== start the worker logic =====
+        if not self.worker or not self.worker.isRunning():
+            self.worker = SortingWorker(
+                pace="slow",      # "slow", "medium", or "fast"
+                bin_count=6,        # 2, 4, or 6 (your choice)
+                error_rate=0.1
+            )
+            self.worker.box_spawned.connect(self.spawn_box_from_worker)
+            self.worker.box_sorted.connect(self._on_box_sorted)
+            self.worker.metrics_ready.connect(self._on_metrics)
+            self.worker.start()
+
     def stop(self):
         self.conveyor.enable_motion(False)
-        if self._box_timer.isActive():
-            self._box_timer.stop()
         if self._pick_timer.isActive():
             self._pick_timer.stop()
         # return arm to home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
+
+        # ===== stop the worker logic =====
+        if self.worker and self.worker.isRunning():
+            self.worker.stop()
 
     # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> return) ----------
     def _pose_home(self):
@@ -272,6 +211,11 @@ class SortingTask(BaseTask, QWidget):
                 self._pick_state = "descend"
                 self._start_seg(self._pose_pick(), 120)
             elif self._pick_state == "descend":
+                # --- NEW: trigger sorting only when arm reaches box ---
+                nearest_color = self._get_nearest_box_color()
+                if nearest_color:
+                    self.worker.sort_box(nearest_color)
+
                 self._pick_state = "hold"
                 self._start_seg(self._pose_pick(), 40)     # brief touch
             elif self._pick_state == "hold":
@@ -321,3 +265,45 @@ class SortingTask(BaseTask, QWidget):
             if isinstance(colors, list) and hit_index < len(colors):
                 del colors[hit_index]
             self.conveyor.update()
+
+    # --- helper to get nearest box color ---
+    def _get_nearest_box_color(self):
+        """Return the color name (string) of the box nearest to the gripper."""
+        grip_x = self.conveyor.width() * 0.44
+        w = self._touch_window_px
+        # Map colors to names
+        COLOR_MAP = {
+            "#c82828": "red",
+            "#2b4a91": "blue",
+            "#1f7a3a": "green",
+            "#6a1b9a": "purple",
+            "#c15800": "orange",
+            "#b8efe6": "teal"
+        }
+        for x, c in zip(self.conveyor._boxes, self.conveyor._box_colors):
+            if (grip_x - w) <= x <= (grip_x + w):
+                hex_color = c.name()  # get hex string
+                return COLOR_MAP.get(hex_color, "unknown")
+        return None
+
+    def _on_box_spawned(self, box_data):
+        color = box_data["color"]
+        error = box_data["error"]
+        print(f"Spawned {color} box (error={error})")
+        # Here you could update GUI counters for each color
+
+    def _on_box_sorted(self, color, correct):
+        print(f"Sorted {color} {'✅' if correct else '❌'}")
+        # Here you could update GUI counters for each color
+
+    def _on_metrics(self, metrics):
+        print("Final metrics:", metrics)
+
+    def spawn_box_from_worker(self, box_data):
+        """Called when worker wants to spawn a box."""
+        color = box_data["color"]
+        error = box_data["error"]
+
+        # Spawn the box with color and error info
+        # Make sure conveyor.spawn_box accepts these parameters
+        self.conveyor.spawn_box(color=color, error=error)
