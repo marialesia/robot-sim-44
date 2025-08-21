@@ -14,21 +14,21 @@ class SortingTask(BaseTask):
         self.arm.c_arm_dark = QColor("#2f6cc9")
 
         # ---- Containers (all defined together) ----
-        # Blue (middle) reusing the built-in container
+        # Blue - reusing the built-in container
         self.container_blue = self.container
         self.container_blue.border = QColor("#2b4a91")
         self.container_blue.fill_top = QColor("#dbe8ff")
         self.container_blue.fill_bottom = QColor("#c7daff")
         self.container_blue.rib = QColor(43, 74, 145, 120)
 
-        # Red (left)
+        # Red
         self.container_red = StorageContainerWidget()
         self.container_red.border = QColor("#8c1f15")
         self.container_red.fill_top = QColor("#ffd6d1")
         self.container_red.fill_bottom = QColor("#ffb8b0")
         self.container_red.rib = QColor(140, 31, 21, 120)
 
-        # Green (right)
+        # Green
         self.container_green = StorageContainerWidget()
         self.container_green.border = QColor("#1f7a3a")
         self.container_green.fill_top = QColor("#d9f7e6")
@@ -110,6 +110,9 @@ class SortingTask(BaseTask):
         self._touch_window_px = 18
         self._touch_cooldown_ms = 120
 
+        # --- Despawn offset (independent of detection) ---
+        self._despawn_offset_px = 24  # +pixels to the RIGHT of detection; increase = disappears later
+
     # ===== Called by your existing GUI =====
     def start(self):
         # belt motion
@@ -188,6 +191,10 @@ class SortingTask(BaseTask):
         e = e0 + (e1 - e0) * t
         self._set_arm(s, e)
 
+        # Despawn slightly later than detection (only while interacting)
+        if self._pick_state in ("hold", "lift"):
+            self._despawn_if_past_cutoff()
+
         # segment complete -> next state (fast timings; same angles)
         if t >= 1.0:
             if self._pick_state == "to_prep":
@@ -211,13 +218,35 @@ class SortingTask(BaseTask):
 
     # ---------- helpers ----------
     def _box_near_grip(self):
-        """Returns True if any box is within a small window around the gripper's x-position."""
+        """Detection-only: True if any box is within the window around the gripper."""
         boxes = getattr(self.conveyor, "_boxes", None)
         if not boxes:
             return False
-        grip_x = self.conveyor.width() * 0.44  # shifted left per your tweak
+        grip_x = self.conveyor.width() * 0.44  # detection point you set
         w = self._touch_window_px
         for x in boxes:
             if (grip_x - w) <= x <= (grip_x + w):
                 return True
         return False
+
+    def _despawn_if_past_cutoff(self):
+        """Remove a box after it passes the later cutoff (independent of detection)."""
+        boxes = getattr(self.conveyor, "_boxes", None)
+        if not boxes:
+            return
+        colors = getattr(self.conveyor, "_box_colors", None)
+
+        detect_x = self.conveyor.width() * 0.44
+        cutoff_x = detect_x + self._despawn_offset_px
+
+        hit_index = -1
+        for i, x in enumerate(boxes):
+            if x >= cutoff_x:
+                hit_index = i
+                break
+
+        if hit_index != -1:
+            del boxes[hit_index]
+            if isinstance(colors, list) and hit_index < len(colors):
+                del colors[hit_index]
+            self.conveyor.update()
