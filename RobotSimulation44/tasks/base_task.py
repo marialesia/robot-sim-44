@@ -60,9 +60,12 @@ class ConveyorBeltWidget(QWidget):
         self._boxes.append(float(x0))
         self._box_colors.append(
             random.choice([
-                QColor(200, 40, 40),   # red
-                QColor(31, 122, 58),   # green
-                QColor(43, 74, 145),   # blue
+                QColor("#c82828"),  # red
+                QColor("#2b4a91"),  # blue
+                QColor("#1f7a3a"),  # green
+                QColor("#6a1b9a"),  # purple
+                QColor("#c15800"), # orange
+                QColor("#b8efe6"),  # teal
             ])
         )
         self.update()

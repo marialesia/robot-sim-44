@@ -13,54 +13,86 @@ class SortingTask(BaseTask):
         self.arm.c_arm = QColor("#3f88ff")
         self.arm.c_arm_dark = QColor("#2f6cc9")
 
-        # ---- Containers: Blue (middle) uses the built-in self.container ----
-        # Blue (middle)
-        self.container.border = QColor("#2b4a91")
-        self.container.fill_top = QColor("#dbe8ff")
-        self.container.fill_bottom = QColor("#c7daff")
-        self.container.rib = QColor(43, 74, 145, 120)
+        # ---- Containers (all defined together) ----
+        # Blue (middle) reusing the built-in container
+        self.container_blue = self.container
+        self.container_blue.border = QColor("#2b4a91")
+        self.container_blue.fill_top = QColor("#dbe8ff")
+        self.container_blue.fill_bottom = QColor("#c7daff")
+        self.container_blue.rib = QColor(43, 74, 145, 120)
 
         # Red (left)
-        self.container_left = StorageContainerWidget()
-        self.container_left.border = QColor("#8c1f15")
-        self.container_left.fill_top = QColor("#ffd6d1")
-        self.container_left.fill_bottom = QColor("#ffb8b0")
-        self.container_left.rib = QColor(140, 31, 21, 120)
+        self.container_red = StorageContainerWidget()
+        self.container_red.border = QColor("#8c1f15")
+        self.container_red.fill_top = QColor("#ffd6d1")
+        self.container_red.fill_bottom = QColor("#ffb8b0")
+        self.container_red.rib = QColor(140, 31, 21, 120)
 
         # Green (right)
-        self.container_right = StorageContainerWidget()
-        self.container_right.border = QColor("#1f7a3a")
-        self.container_right.fill_top = QColor("#d9f7e6")
-        self.container_right.fill_bottom = QColor("#bff0d3")
-        self.container_right.rib = QColor(31, 122, 58, 120)
+        self.container_green = StorageContainerWidget()
+        self.container_green.border = QColor("#1f7a3a")
+        self.container_green.fill_top = QColor("#d9f7e6")
+        self.container_green.fill_bottom = QColor("#bff0d3")
+        self.container_green.rib = QColor(31, 122, 58, 120)
 
-        # ---- Layout: Conveyor (row 0), Arm (row 1, spanning 3 cols),
-        #              Three containers (row 3: red, blue, green) ----
+        # Purple
+        self.container_purple = StorageContainerWidget()
+        self.container_purple.border = QColor("#6a1b9a")
+        self.container_purple.fill_top = QColor("#f0e3ff")
+        self.container_purple.fill_bottom = QColor("#e3ccff")
+        self.container_purple.rib = QColor(106, 27, 154, 120)
+
+        # Orange
+        self.container_orange = StorageContainerWidget()
+        self.container_orange.border = QColor("#c15800")
+        self.container_orange.fill_top = QColor("#ffe8cc")
+        self.container_orange.fill_bottom = QColor("#ffd4a8")
+        self.container_orange.rib = QColor(193, 88, 0, 120)
+
+        # Teal
+        self.container_teal = StorageContainerWidget()
+        self.container_teal.border = QColor("#00796b")
+        self.container_teal.fill_top = QColor("#d2f5ef")
+        self.container_teal.fill_bottom = QColor("#b8efe6")
+        self.container_teal.rib = QColor(0, 121, 107, 120)
+
+        # ---- Layout: Conveyor (row 0), Arm (row 1), Containers (row 3) ----
         self.set_positions(
-            conveyor=dict(row=0, col=0, colSpan=3, align=Qt.AlignTop),
-            arm=dict(row=0, col=0, colSpan=3, align=Qt.AlignHCenter | Qt.AlignBottom),
-            container=dict(row=3, col=1, align=Qt.AlignHCenter | Qt.AlignTop),  # Blue in the middle
+            conveyor=dict(row=0, col=0, colSpan=6, align=Qt.AlignTop),  # Change the position of the conveyor belt here
+            arm=dict(row=0, col=2, colSpan=2, align=Qt.AlignHCenter | Qt.AlignBottom),  # Change the position of the arm here
             col_stretch=[1, 1, 1],
             row_stretch=[0, 0, 1],
             spacing=18
         )
 
-        # Add Red (left) and Green (right) on the same row under the arm
-        self.grid.addWidget(self.container_left,  3, 0, 1, 1, Qt.AlignLeft  | Qt.AlignTop)
-        self.grid.addWidget(self.container_right, 3, 2, 1, 1, Qt.AlignRight | Qt.AlignTop)
+        # Place all containers on the same row
+        self.grid.addWidget(self.container_red,    3, 0, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
+        self.grid.addWidget(self.container_blue,   3, 1, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
+        self.grid.addWidget(self.container_green,  3, 2, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
+        self.grid.addWidget(self.container_purple, 3, 3, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
+        self.grid.addWidget(self.container_orange, 3, 4, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
+        self.grid.addWidget(self.container_teal,   3, 5, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
+
+        # Ensure new columns expand evenly
+        self.grid.setColumnStretch(3, 1)
+        self.grid.setColumnStretch(4, 1)
+        self.grid.setColumnStretch(5, 1)
 
         # Repaint
         self.arm.update()
         self.conveyor.update()
-        self.container_left.update()
-        self.container.update()
-        self.container_right.update()
+        self.container_red.update()
+        self.container_blue.update()
+        self.container_green.update()
+        self.container_purple.update()
+        self.container_orange.update()
+        self.container_teal.update()
 
         # ===== Existing box spawner (created but not started until Start) =====
         self._box_timer = QTimer(self)
         self._box_timer.timeout.connect(self.conveyor.spawn_box)
 
-        # ===== Arm "pick" animation (timer-driven; no base_task changes) =====
+        # ===== Arm "touch every box" animation (timer-driven) =====
         self._pick_timer = QTimer(self)
         self._pick_timer.setInterval(16)  # ~60 FPS
         self._pick_timer.timeout.connect(self._tick_pick)
@@ -75,8 +107,8 @@ class SortingTask(BaseTask):
         # --- Trigger settings to touch every box ---
         self._now_ms = 0
         self._last_touch_time_ms = -10000
-        self._touch_window_px = 18      # how close a box must be to the gripper (horizontally)
-        self._touch_cooldown_ms = 120   # min time between triggers (prevents double-trigger on one box)
+        self._touch_window_px = 18
+        self._touch_cooldown_ms = 120
 
     # ===== Called by your existing GUI =====
     def start(self):
@@ -100,7 +132,6 @@ class SortingTask(BaseTask):
             self._set_arm(sh, el)
             self._pick_timer.start()
 
-
     def stop(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
@@ -113,19 +144,15 @@ class SortingTask(BaseTask):
 
     # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> return) ----------
     def _pose_home(self):
-        # initial pose
         return (-90.0, -0.0)
 
     def _pose_prep(self):
-        # slight move over belt before descending
         return (-92.0, -12.0)
 
     def _pose_pick(self):
-        # descend to "grip" height over belt
         return (-110.0, -95.0)
 
     def _pose_lift(self):
-        # lift a bit as if carrying
         return (-93.0, -10.0)
 
     def _set_arm(self, shoulder, elbow):
@@ -188,9 +215,8 @@ class SortingTask(BaseTask):
         boxes = getattr(self.conveyor, "_boxes", None)
         if not boxes:
             return False
-        grip_x = self.conveyor.width() * 0.44  # center over belt; adjust if the gripper is offset (not touching the box)
+        grip_x = self.conveyor.width() * 0.44  # shifted left per your tweak
         w = self._touch_window_px
-        # Trigger if any box center is inside [grip_x - w, grip_x + w]
         for x in boxes:
             if (grip_x - w) <= x <= (grip_x + w):
                 return True
