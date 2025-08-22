@@ -289,12 +289,10 @@ class SortingTask(BaseTask):
     def _on_box_spawned(self, box_data):
         color = box_data["color"]
         error = box_data["error"]
-        print(f"Spawned {color} box (error={error})")
-        # Here you could update GUI counters for each color
 
     def _on_box_sorted(self, color, correct):
         print(f"Sorted {color} {'✅' if correct else '❌'}")
-        # Here you could update GUI counters for each color
+        # SHOULD BE UPDATED TO BE IN GUI INSTEAD LATER ----------
 
     def _on_metrics(self, metrics):
         print("Final metrics:", metrics)
