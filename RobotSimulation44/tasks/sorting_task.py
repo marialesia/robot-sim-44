@@ -139,7 +139,8 @@ class SortingTask(BaseTask):
 
         # start spawning boxes periodically
         if not self._box_timer.isActive():
-            self._box_timer.start(800)    # one box every 0.8s
+            # self._box_timer.start(800)    # one box every 0.8s
+            self._box_timer.start(2000)    # one box every 2.0s
 
         # reset trigger state so we can fire immediately after a Stop
         self._now_ms = 0
