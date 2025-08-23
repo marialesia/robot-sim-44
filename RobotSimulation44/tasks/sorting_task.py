@@ -252,7 +252,7 @@ class SortingTask(BaseTask):
         boxes = getattr(self.conveyor, "_boxes", None)
         if not boxes:
             return False
-        grip_x = self.conveyor.width() * 0.44  # detection point you set
+        grip_x = self.conveyor.width() * 0.40  # edit this to alter the robot arm 'detection soze'
         w = self._touch_window_px
         for x in boxes:
             if (grip_x - w) <= x <= (grip_x + w):
@@ -266,7 +266,7 @@ class SortingTask(BaseTask):
             return
         colors = getattr(self.conveyor, "_box_colors", None)
 
-        detect_x = self.conveyor.width() * 0.44
+        detect_x = self.conveyor.width() * 0.44 
         cutoff_x = detect_x + self._despawn_offset_px
 
         hit_index = -1
