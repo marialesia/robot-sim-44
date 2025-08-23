@@ -1,5 +1,6 @@
 # main_interface/layout_controller.py
 from PyQt5.QtWidgets import QHBoxLayout
+from PyQt5.QtCore import Qt
 
 class LayoutController:
     def __init__(self, parent_layout, task_manager, status_label=None):
@@ -15,23 +16,32 @@ class LayoutController:
         self.status_label = status_label
 
     def update_workspace(self, active_tasks):
-        """Clear workspace and add panels for active tasks."""
-        # Clear current workspace
-        for i in reversed(range(self.workspace_area.count())):
-            widget = self.workspace_area.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
+        """Clear workspace and add panels for active tasks, centered as a group."""
+        # Fully clear current workspace (widgets AND spacers)
+        while self.workspace_area.count():
+            item = self.workspace_area.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
 
-        # Add panels from task manager
+        # Add left spacer -> keeps the group centered
+        self.workspace_area.addStretch(1)
+
+        # Add selected task panels
         panels = self.task_manager.get_task_panels(active_tasks)
         for panel in panels:
-            self.workspace_area.addWidget(panel)
+            # Align near the top; horizontal centering is handled by the stretches
+            self.workspace_area.addWidget(panel, 0, Qt.AlignVCenter)
+
+        # Add right spacer
+        self.workspace_area.addStretch(1)
 
         # Update status label if assigned
         if self.status_label:
             self.status_label.setText(
                 f"Active tasks: {', '.join(active_tasks) if active_tasks else 'None'}"
             )
+
 
     def start_tasks(self):
         """Start all tasks that have a 'start' method."""
