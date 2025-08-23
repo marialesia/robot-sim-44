@@ -1,6 +1,7 @@
 ﻿# tasks/sorting_task.py
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from .base_task import BaseTask, StorageContainerWidget
 
 class SortingTask(BaseTask):
@@ -59,13 +60,15 @@ class SortingTask(BaseTask):
         # ---- Layout: Conveyor (row 0), Arm (row 1), Containers (row 3) ----
         self.set_positions(
             conveyor=dict(row=0, col=0, colSpan=6, align=Qt.AlignTop),  # Change the position of the conveyor belt here
-            arm=dict(row=0, col=2, colSpan=2, align=Qt.AlignHCenter | Qt.AlignBottom),  # Change the position of the arm here
+            arm=dict(row=0, col=0, colSpan=6, align=Qt.AlignHCenter | Qt.AlignBottom),  # Change the position of the arm here
             col_stretch=[1, 1, 1],
             row_stretch=[0, 0, 1],
             spacing=18
         )
 
-        # Place all containers on the same row
+        '''
+        # Place all containers on the same row but in separate columns
+        # self.grid.addWidget(widget, row, column, rowSpan, columnSpan, alignment) 
         self.grid.addWidget(self.container_red,    3, 0, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
         self.grid.addWidget(self.container_blue,   3, 1, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
         self.grid.addWidget(self.container_green,  3, 2, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
@@ -77,6 +80,22 @@ class SortingTask(BaseTask):
         self.grid.setColumnStretch(3, 1)
         self.grid.setColumnStretch(4, 1)
         self.grid.setColumnStretch(5, 1)
+        '''
+        # Group all containers into one tight horizontal row (centered)
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(12)
+
+        # Keep each container compact so the row doesn't stretch across the whole window
+        for w in (self.container_red, self.container_blue, self.container_green,
+                  self.container_purple, self.container_orange, self.container_teal):
+            w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+            row_layout.addWidget(w)
+
+        # Add the row to the same grid area where your containers were (row 3), span all 6 columns
+        self.grid.addWidget(row, 3, 0, 1, 6, Qt.AlignHCenter | Qt.AlignTop)
+
 
         # Repaint
         self.arm.update()

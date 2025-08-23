@@ -64,7 +64,7 @@ class ConveyorBeltWidget(QWidget):
                 QColor("#2b4a91"),  # blue
                 QColor("#1f7a3a"),  # green
                 QColor("#6a1b9a"),  # purple
-                QColor("#c15800"), # orange
+                QColor("#c15800"),  # orange
                 QColor("#b8efe6"),  # teal
             ])
         )
@@ -234,7 +234,7 @@ class StorageContainerWidget(QWidget):
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(180, 120)
+        self.setMinimumSize(110, 110) # change the size of the containers here (width, height)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Palette (override per task)
@@ -304,7 +304,7 @@ class BaseTask(QWidget):
         )
         
         self.scene.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.scene.setMinimumSize(600, 400)
+        self.scene.setMinimumSize(720, 400) #(width, length)
         self.scene.setMaximumSize(1200, 400) 
         outer.addWidget(self.scene)
 
