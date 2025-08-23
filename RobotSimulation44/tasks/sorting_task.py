@@ -1,5 +1,4 @@
-﻿# tasks/sorting_task.py
-from PyQt5.QtGui import QColor
+﻿from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from .base_task import BaseTask, StorageContainerWidget
@@ -67,7 +66,7 @@ class SortingTask(BaseTask):
         )
 
         '''
-        # Place all containers on the same row but in separate columns
+        # Place all containers on the same row
         # self.grid.addWidget(widget, row, column, rowSpan, columnSpan, alignment) 
         self.grid.addWidget(self.container_red,    3, 0, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
         self.grid.addWidget(self.container_blue,   3, 1, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
@@ -163,6 +162,9 @@ class SortingTask(BaseTask):
         # return arm to home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
+        # OPTIONAL but tidy: also clear any held-box visual on stop
+        self.arm.held_box_visible = False
+        self.arm.update()
 
     # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> return) ----------
     def _pose_home(self):
@@ -221,12 +223,21 @@ class SortingTask(BaseTask):
                 self._start_seg(self._pose_pick(), 120)
             elif self._pick_state == "descend":
                 self._pick_state = "hold"
+                # Show a box in the gripper using the detected box's colour (if any)
+                c = self._color_of_box_in_window()
+                if c is not None:
+                    self.arm.held_box_color = c
+                    self.arm.held_box_visible = True
+                    self.arm.update()
                 self._start_seg(self._pose_pick(), 40)     # brief touch
             elif self._pick_state == "hold":
                 self._pick_state = "lift"
                 self._start_seg(self._pose_lift(), 120)
             elif self._pick_state == "lift":
                 self._pick_state = "return"
+                # Hide the carried box as we head home
+                self.arm.held_box_visible = False
+                self.arm.update()
                 self._start_seg(self._pose_home(), 160)
             elif self._pick_state == "return":
                 # brief idle before next box trigger
@@ -269,3 +280,17 @@ class SortingTask(BaseTask):
             if isinstance(colors, list) and hit_index < len(colors):
                 del colors[hit_index]
             self.conveyor.update()
+
+    def _color_of_box_in_window(self):
+        """Return the QColor of the first box currently inside the detection window (or None)."""
+        boxes = getattr(self.conveyor, "_boxes", None)
+        cols  = getattr(self.conveyor, "_box_colors", None)
+        if not boxes or not cols:
+            return None
+        grip_x = self.conveyor.width() * 0.44
+        w = self._touch_window_px
+        for i, x in enumerate(boxes):
+            if (grip_x - w) <= x <= (grip_x + w):
+                if i < len(cols):
+                    return cols[i]
+        return None

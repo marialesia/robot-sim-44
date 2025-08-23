@@ -1,5 +1,4 @@
-﻿# tasks/base_task.py
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout
+﻿from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout
 from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
 from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer, pyqtProperty
 
@@ -170,6 +169,10 @@ class RobotArmWidget(QWidget):
         self.c_joint = QColor(230, 230, 235)
         self.c_base = QColor(60, 60, 65)
 
+        # Held box (optional overlay drawn beneath gripper fingers)
+        self.held_box_visible = False
+        self.held_box_color = QColor(200, 40, 40)
+
     def _joint(self, p, r_outer=16, r_inner=8):
         p.setPen(QPen(QColor(40, 40, 45), 2))
         p.setBrush(QBrush(self.c_joint)); p.drawEllipse(QPointF(0, 0), r_outer, r_outer)
@@ -217,6 +220,19 @@ class RobotArmWidget(QWidget):
         p.translate(L2, 0); self._joint(p, r_outer=max(8.0, arm_t*0.65), r_inner=max(3.0, arm_t*0.33))
         p.setPen(QPen(self.c_arm_dark, 2)); p.setBrush(QBrush(self.c_arm))
         fL, fW = max(16.0, arm_t*0.9), max(4.0, arm_t*0.35)
+
+        # --- Held box (drawn before fingers so grippers stay visible)
+        if getattr(self, "held_box_visible", False):
+            p.save()
+            hb_len = max(16.0, fL * 0.45)        # box length along the gripper
+            hb_thk = max(6.0,  arm_t * 0.55)     # box thickness between fingers
+            xc = fL * 0.55                       # position around mid-finger
+            p.setPen(QPen(self.held_box_color.darker(200), 1.5))
+            p.setBrush(QBrush(self.held_box_color))
+            p.drawRoundedRect(QRectF(xc - hb_len/2, -hb_thk/2, hb_len, hb_thk), hb_thk/4, hb_thk/4)
+            p.restore()
+
+        # Fingers (unchanged)
         p.save(); p.rotate(18);  p.drawRoundedRect(QRectF(0, -fW/2, fL, fW), fW/1.6, fW/1.6); p.restore()
         p.save(); p.rotate(-18); p.drawRoundedRect(QRectF(0, -fW/2, fL, fW), fW/1.6, fW/1.6); p.restore()
 
@@ -374,4 +390,3 @@ class BaseTask(QWidget):
         if isinstance(margins, (list, tuple)) and len(margins) == 4:
             l, t, r, b = margins
             self.grid.setContentsMargins(int(l), int(t), int(r), int(b))
-
