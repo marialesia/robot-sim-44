@@ -1,4 +1,5 @@
-﻿from PyQt5.QtGui import QColor
+﻿# tasks/sorting_task.py
+from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from .base_task import BaseTask, StorageContainerWidget
@@ -131,6 +132,9 @@ class SortingTask(BaseTask):
         # --- Despawn offset (independent of detection) ---
         self._despawn_offset_px = 24  # +pixels to the RIGHT of detection; increase = disappears later
 
+        # --- NEW: remember which container direction to "present" toward after lift ---
+        self._target_slot = None  # one of: red/blue/green/purple/orange/teal
+
     # ===== Called by your existing GUI =====
     def start(self):
         # belt motion
@@ -147,6 +151,7 @@ class SortingTask(BaseTask):
         self._last_touch_time_ms = -10000
         self._pick_state = "idle"
         self._pick_t = 0
+        self._target_slot = None  # reset target on start
 
         # start arm pick monitor
         if not self._pick_timer.isActive():
@@ -167,7 +172,7 @@ class SortingTask(BaseTask):
         self.arm.held_box_visible = False
         self.arm.update()
 
-    # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> return) ----------
+    # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> present -> return) ----------
     def _pose_home(self):
         return (-90.0, -0.0)
 
@@ -179,6 +184,18 @@ class SortingTask(BaseTask):
 
     def _pose_lift(self):
         return (-93.0, -10.0)
+
+    # Quick 'pointing' poses toward each container’s general direction
+    def _pose_present(self, slot):
+        poses = {
+            "red":    (-160.0, -8.0),   # far left
+            "blue":   (-138.0, -10.0),  # left-mid
+            "green":  (-118.0, -12.0),  # slightly left of center
+            "purple": (-62.0,  -12.0),  # slightly right of center
+            "orange": (-42.0,  -10.0),  # right-mid
+            "teal":   (-20.0,  -8.0),   # far right
+        }
+        return poses.get(slot, self._pose_lift())
 
     def _set_arm(self, shoulder, elbow):
         self.arm.shoulder_angle = float(shoulder)
@@ -222,6 +239,7 @@ class SortingTask(BaseTask):
             if self._pick_state == "to_prep":
                 self._pick_state = "descend"
                 self._start_seg(self._pose_pick(), 120)
+
             elif self._pick_state == "descend":
                 self._pick_state = "hold"
                 # Show a box in the gripper using the detected box's colour (if any)
@@ -229,21 +247,39 @@ class SortingTask(BaseTask):
                 if c is not None:
                     self.arm.held_box_color = c
                     self.arm.held_box_visible = True
+                    # remember which direction to present toward
+                    self._target_slot = self._color_to_slot(c)
                     self.arm.update()
                 self._start_seg(self._pose_pick(), 40)     # brief touch
+
             elif self._pick_state == "hold":
                 self._pick_state = "lift"
                 self._start_seg(self._pose_lift(), 120)
+
             elif self._pick_state == "lift":
+                # NEW: point toward the matching container before returning
+                if self._target_slot:
+                    self._pick_state = "present"
+                    self._start_seg(self._pose_present(self._target_slot), 200)
+                else:
+                    self._pick_state = "return"
+                    self.arm.held_box_visible = False
+                    self.arm.update()
+                    self._start_seg(self._pose_home(), 160)
+
+            elif self._pick_state == "present":
                 self._pick_state = "return"
-                # Hide the carried box as we head home
+                # hide the held box as we head home
                 self.arm.held_box_visible = False
                 self.arm.update()
-                self._start_seg(self._pose_home(), 160)
+                self._start_seg(self._pose_home(), 200)
+
             elif self._pick_state == "return":
                 # brief idle before next box trigger
                 self._pick_state = "idle_pause"
+                self._target_slot = None
                 self._start_seg(self._pose_home(), 40)
+
             elif self._pick_state == "idle_pause":
                 self._pick_state = "idle"
 
@@ -294,4 +330,24 @@ class SortingTask(BaseTask):
             if (grip_x - w) <= x <= (grip_x + w):
                 if i < len(cols):
                     return cols[i]
+        return None
+
+    # Map a QColor to a slot name matching the containers
+    def _color_to_slot(self, qcolor):
+        try:
+            key = qcolor.name().lower()
+        except Exception:
+            return None
+        if key == "#c82828":
+            return "red"
+        if key == "#2b4a91":
+            return "blue"
+        if key == "#1f7a3a":
+            return "green"
+        if key == "#6a1b9a":
+            return "purple"
+        if key == "#c15800":
+            return "orange"
+        if key == "#b8efe6":
+            return "teal"
         return None
