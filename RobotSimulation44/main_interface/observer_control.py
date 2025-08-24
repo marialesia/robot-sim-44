@@ -30,7 +30,7 @@ class ObserverControl(QObject):
 
         # Start / Stop buttons
         self.start_button = QPushButton("Start")
-        self.stop_button = QPushButton("Stop")
+        self.stop_button = QPushButton("Pause") # Made this 'Pause' instead of 'Stop' as currently it functions more as a pause button. We might have to change all the variables/methods to reflect this
         self.start_button.clicked.connect(lambda: self.start_pressed.emit())
         self.stop_button.clicked.connect(lambda: self.stop_pressed.emit())
         self.control_bar.addWidget(self.start_button)
