@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer, pyqtProperty
 class ConveyorBeltWidget(QWidget):
     """
     Realistic conveyor with rollers, belt gradient, treads, and rails.
-    Now includes a lightweight, non-blocking tread animation + small red boxes.
+    Now includes a lightweight, non-blocking tread animation + red boxes.
     """
     def __init__(self, parent=None):
         super().__init__(parent)

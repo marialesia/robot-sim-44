@@ -168,7 +168,7 @@ class SortingTask(BaseTask):
         # return arm to home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
-        # OPTIONAL but tidy: also clear any held-box visual on stop
+        # clear any held-box visual on stop
         self.arm.held_box_visible = False
         self.arm.update()
 
@@ -186,14 +186,16 @@ class SortingTask(BaseTask):
         return (-93.0, -10.0)
 
     # Quick 'pointing' poses toward each container’s general direction
+    # (arm rotation from base, elbow rotation)
+    # -90 is directly up
     def _pose_present(self, slot):
         poses = {
-            "red":    (-160.0, -8.0),   # far left
-            "blue":   (-138.0, -10.0),  # left-mid
-            "green":  (-118.0, -12.0),  # slightly left of center
-            "purple": (-62.0,  -12.0),  # slightly right of center
-            "orange": (-42.0,  -10.0),  # right-mid
-            "teal":   (-20.0,  -8.0),   # far right
+            "red":    (-200.0, -8.0),   # far left
+            "blue":   (-220.0, -10.0),  # left-mid
+            "green":  (-240.0, -12.0),  # slightly left of center
+            "purple": (60.0,  12.0),    # slightly right of center
+            "orange": (40.0,  10.0),    # right-mid
+            "teal":   (20.0,  8.0),     # far right
         }
         return poses.get(slot, self._pose_lift())
 
