@@ -169,7 +169,7 @@ class RobotArmWidget(QWidget):
         self.c_joint = QColor(230, 230, 235)
         self.c_base = QColor(60, 60, 65)
 
-        # Held box (optional overlay drawn beneath gripper fingers)
+        # Held box (overlay drawn beneath gripper fingers)
         self.held_box_visible = False
         self.held_box_color = QColor(200, 40, 40)
 

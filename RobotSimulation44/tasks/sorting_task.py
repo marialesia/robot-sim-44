@@ -130,10 +130,13 @@ class SortingTask(BaseTask):
         self._touch_cooldown_ms = 120
 
         # --- Despawn offset (independent of detection) ---
-        self._despawn_offset_px = 24  # +pixels to the RIGHT of detection; increase = disappears later
+        self._despawn_offset_px = 0  # +pixels to the RIGHT of detection; increase = disappears later
 
-        # --- NEW: remember which container direction to "present" toward after lift ---
+        # --- remember which container direction to "present" toward after lift ---
         self._target_slot = None  # one of: red/blue/green/purple/orange/teal
+
+        # --- capture color at trigger-time to avoid races ---
+        self._pending_color = None  # color captured exactly when the cycle starts
 
     # ===== Called by your existing GUI =====
     def start(self):
@@ -152,6 +155,7 @@ class SortingTask(BaseTask):
         self._pick_state = "idle"
         self._pick_t = 0
         self._target_slot = None  # reset target on start
+        self._pending_color = None
 
         # start arm pick monitor
         if not self._pick_timer.isActive():
@@ -218,6 +222,11 @@ class SortingTask(BaseTask):
         if self._pick_state == "idle":
             if self._box_near_grip() and (self._now_ms - self._last_touch_time_ms) >= self._touch_cooldown_ms:
                 self._last_touch_time_ms = self._now_ms
+
+                # Lock color & slot at trigger time (more reliable than sampling later)
+                self._pending_color = self._color_of_box_in_window()
+                self._target_slot = self._color_to_slot(self._pending_color) if self._pending_color else None
+
                 self._pick_state = "to_prep"
                 self._start_seg(self._pose_prep(), 120)  # fast move
             else:
@@ -244,8 +253,8 @@ class SortingTask(BaseTask):
 
             elif self._pick_state == "descend":
                 self._pick_state = "hold"
-                # Show a box in the gripper using the detected box's colour (if any)
-                c = self._color_of_box_in_window()
+                # Prefer a live sample; fall back to the color we locked at trigger time
+                c = self._color_of_box_in_window() or self._pending_color
                 if c is not None:
                     self.arm.held_box_color = c
                     self.arm.held_box_visible = True
@@ -259,7 +268,7 @@ class SortingTask(BaseTask):
                 self._start_seg(self._pose_lift(), 120)
 
             elif self._pick_state == "lift":
-                # NEW: point toward the matching container before returning
+                # point toward the matching container before returning
                 if self._target_slot:
                     self._pick_state = "present"
                     self._start_seg(self._pose_present(self._target_slot), 200)
@@ -280,18 +289,23 @@ class SortingTask(BaseTask):
                 # brief idle before next box trigger
                 self._pick_state = "idle_pause"
                 self._target_slot = None
+                self._pending_color = None
                 self._start_seg(self._pose_home(), 40)
 
             elif self._pick_state == "idle_pause":
                 self._pick_state = "idle"
 
     # ---------- helpers ----------
+    def _grip_x(self):
+        """Single source of truth for the gripper's detection X (edit here to shift detection)."""
+        return self.conveyor.width() * 0.40
+
     def _box_near_grip(self):
         """Detection-only: True if any box is within the window around the gripper."""
         boxes = getattr(self.conveyor, "_boxes", None)
         if not boxes:
             return False
-        grip_x = self.conveyor.width() * 0.40  # edit this to alter the robot arm 'detection soze'
+        grip_x = self._grip_x()  # unified detection X
         w = self._touch_window_px
         for x in boxes:
             if (grip_x - w) <= x <= (grip_x + w):
@@ -305,8 +319,9 @@ class SortingTask(BaseTask):
             return
         colors = getattr(self.conveyor, "_box_colors", None)
 
-        detect_x = self.conveyor.width() * 0.44 
-        cutoff_x = detect_x + self._despawn_offset_px
+        # Use the same detection X as the gripper trigger
+        detect_x = self._grip_x()
+        cutoff_x = detect_x + self._despawn_offset_px  # set offset to 0 so the box disappears as soon as its touched (line 133)
 
         hit_index = -1
         for i, x in enumerate(boxes):
@@ -320,13 +335,14 @@ class SortingTask(BaseTask):
                 del colors[hit_index]
             self.conveyor.update()
 
+
     def _color_of_box_in_window(self):
         """Return the QColor of the first box currently inside the detection window (or None)."""
         boxes = getattr(self.conveyor, "_boxes", None)
         cols  = getattr(self.conveyor, "_box_colors", None)
         if not boxes or not cols:
             return None
-        grip_x = self.conveyor.width() * 0.44
+        grip_x = self._grip_x()  # unified detection X
         w = self._touch_window_px
         for i, x in enumerate(boxes):
             if (grip_x - w) <= x <= (grip_x + w):
