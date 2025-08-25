@@ -20,9 +20,9 @@ class SortingWorker(QThread):
         self.colors = all_colors[:bin_count]
 
         self.pace_map = {
-            "slow": (0.5, 1),
-            "medium": (4, 7),
-            "fast": (8, 10)
+            "slow": (0.1, 0.3),
+            "medium": (0.3, 0.7),
+            "fast": (0.7, 1)
         }
 
         self.total = 0
