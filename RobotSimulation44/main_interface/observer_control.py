@@ -29,12 +29,12 @@ class ObserverControl(QObject):
         self.control_bar.addWidget(self.inspection_checkbox)
 
         # Start / Stop buttons
-        self.start_button = QPushButton("Start")
-        self.stop_button = QPushButton("Pause") # Made this 'Pause' instead of 'Stop' as currently it functions more as a pause button. We might have to change all the variables/methods to reflect this
-        self.start_button.clicked.connect(lambda: self.start_pressed.emit())
-        self.stop_button.clicked.connect(lambda: self.stop_pressed.emit())
-        self.control_bar.addWidget(self.start_button)
-        self.control_bar.addWidget(self.stop_button)
+        # self.start_button = QPushButton("Start")
+        # self.stop_button = QPushButton("Pause") # Made this 'Pause' instead of 'Stop' as currently it functions more as a pause button. We might have to change all the variables/methods to reflect this
+        # self.start_button.clicked.connect(lambda: self.start_pressed.emit())
+        # self.stop_button.clicked.connect(lambda: self.stop_pressed.emit())
+        # self.control_bar.addWidget(self.start_button)
+        # self.control_bar.addWidget(self.stop_button)
 
         parent_layout.addLayout(self.control_bar)
 
