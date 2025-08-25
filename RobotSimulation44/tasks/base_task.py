@@ -52,13 +52,10 @@ class ConveyorBeltWidget(QWidget):
     def setBeltSpeed(self, v: float):
         self._belt_speed = float(v)
 
-    def spawn_box(self):
-        """Spawn a small box at the left edge; color is random (red/green/blue/or more)."""
-        import random  # keep import local to avoid changing global imports
-        x0 = 12 + self._box_inset
-        self._boxes.append(float(x0))
-        self._box_colors.append(
-            random.choice([
+    def spawn_box(self, color=None, error=False):
+        import random
+        if color is None:
+            color = random.choice([
                 QColor("#c82828"),  # red
                 QColor("#2b4a91"),  # blue
                 QColor("#1f7a3a"),  # green
@@ -66,7 +63,20 @@ class ConveyorBeltWidget(QWidget):
                 QColor("#c15800"),  # orange
                 QColor("#b8efe6"),  # teal
             ])
-        )
+        elif isinstance(color, str):
+            color_map = {
+                "red": QColor("#c82828"),
+                "blue": QColor("#2b4a91"),
+                "green": QColor("#1f7a3a"),
+                "purple": QColor("#6a1b9a"),
+                "orange": QColor("#c15800"),
+                "teal": QColor("#b8efe6")
+            }
+            color = color_map.get(color.lower(), QColor("#c82828"))
+
+        x0 = 12 + self._box_inset
+        self._boxes.append(float(x0))
+        self._box_colors.append(color)
         self.update()
 
 

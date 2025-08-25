@@ -3,6 +3,7 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from .base_task import BaseTask, StorageContainerWidget
+from .sorting_logic import SortingWorker
 
 class SortingTask(BaseTask):
     def __init__(self):
@@ -138,16 +139,14 @@ class SortingTask(BaseTask):
         # --- capture color at trigger-time to avoid races ---
         self._pending_color = None  # color captured exactly when the cycle starts
 
+        # --- initialize worker ---
+        self.worker = None
+
     # ===== Called by your existing GUI =====
     def start(self):
         # belt motion
         self.conveyor.setBeltSpeed(120)   # left -> right
         self.conveyor.enable_motion(True)
-
-        # start spawning boxes periodically
-        if not self._box_timer.isActive():
-            # self._box_timer.start(800)    # one box every 0.8s
-            self._box_timer.start(2000)    # one box every 2.0s
 
         # reset trigger state so we can fire immediately after a Stop
         self._now_ms = 0
@@ -163,6 +162,18 @@ class SortingTask(BaseTask):
             self._set_arm(sh, el)
             self._pick_timer.start()
 
+        # ===== start the worker logic =====
+        if not self.worker or not self.worker.isRunning():
+            self.worker = SortingWorker(
+                pace="slow",      # "slow", "medium", or "fast"
+                bin_count=6,        # 2, 4, or 6 (your choice)
+                error_rate=0.1
+            )
+            self.worker.box_spawned.connect(self.spawn_box_from_worker)
+            self.worker.box_sorted.connect(self._on_box_sorted)
+            self.worker.metrics_ready.connect(self._on_metrics)
+            self.worker.start()
+
     def stop(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
@@ -175,6 +186,10 @@ class SortingTask(BaseTask):
         # clear any held-box visual on stop
         self.arm.held_box_visible = False
         self.arm.update()
+
+        # ===== stop the worker logic =====
+        if self.worker and self.worker.isRunning():
+            self.worker.stop()
 
     # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> present -> return) ----------
     def _pose_home(self):
@@ -222,7 +237,7 @@ class SortingTask(BaseTask):
         if self._pick_state == "idle":
             if self._box_near_grip() and (self._now_ms - self._last_touch_time_ms) >= self._touch_cooldown_ms:
                 self._last_touch_time_ms = self._now_ms
-
+                
                 # Lock color & slot at trigger time (more reliable than sampling later)
                 self._pending_color = self._color_of_box_in_window()
                 self._target_slot = self._color_to_slot(self._pending_color) if self._pending_color else None
@@ -252,6 +267,20 @@ class SortingTask(BaseTask):
                 self._start_seg(self._pose_pick(), 120)
 
             elif self._pick_state == "descend":
+                # --- NEW: trigger sorting only when arm reaches box ---
+                nearest_color = self._color_of_box_in_window()
+                if nearest_color:
+                    hex_color = nearest_color.name() if hasattr(nearest_color, "name") else nearest_color
+                    COLOR_MAP = {
+                        "#c82828": "red",
+                        "#2b4a91": "blue",
+                        "#1f7a3a": "green",
+                        "#6a1b9a": "purple",
+                        "#c15800": "orange",
+                        "#b8efe6": "teal"
+                    }
+                    self.worker.sort_box(COLOR_MAP.get(hex_color, "unknown"))
+
                 self._pick_state = "hold"
                 # Prefer a live sample; fall back to the color we locked at trigger time
                 c = self._color_of_box_in_window() or self._pending_color
@@ -336,6 +365,7 @@ class SortingTask(BaseTask):
             self.conveyor.update()
 
 
+    # --- helper to get nearest box color ---
     def _color_of_box_in_window(self):
         """Return the QColor of the first box currently inside the detection window (or None)."""
         boxes = getattr(self.conveyor, "_boxes", None)
@@ -369,3 +399,23 @@ class SortingTask(BaseTask):
         if key == "#b8efe6":
             return "teal"
         return None
+
+    def _on_box_spawned(self, box_data):
+        color = box_data["color"]
+        error = box_data["error"]
+
+    def _on_box_sorted(self, color, correct):
+        print(f"Sorted {color} {'✅' if correct else '❌'}")
+        # SHOULD BE UPDATED TO BE IN GUI INSTEAD LATER ----------
+
+    def _on_metrics(self, metrics):
+        print("Final metrics:", metrics)
+
+    def spawn_box_from_worker(self, box_data):
+        """Called when worker wants to spawn a box."""
+        color = box_data["color"]
+        error = box_data["error"]
+
+        # Spawn the box with color and error info
+        # Make sure conveyor.spawn_box accepts these parameters
+        self.conveyor.spawn_box(color=color, error=error)
