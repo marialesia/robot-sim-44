@@ -267,7 +267,7 @@ class SortingTask(BaseTask):
                 self._start_seg(self._pose_pick(), 120)
 
             elif self._pick_state == "descend":
-                # --- NEW: trigger sorting only when arm reaches box ---
+                # --- trigger sorting only when arm reaches box ---
                 nearest_color = self._color_of_box_in_window()
                 if nearest_color:
                     hex_color = nearest_color.name() if hasattr(nearest_color, "name") else nearest_color
