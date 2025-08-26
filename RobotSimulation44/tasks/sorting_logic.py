@@ -59,7 +59,7 @@ class SortingWorker(QThread):
     def stop(self):
         self.running = False
 
-    # --- New method: sort box when arm touches it ---
+    # --- sort box when arm touches it ---
     def sort_box(self, box_color):
         is_error = random.random() < self.error_rate
         if is_error:
