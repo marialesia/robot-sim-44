@@ -8,7 +8,7 @@ class PackagingTask(BaseTask):
     def __init__(self):
         super().__init__(task_name="Packaging")
 
-        # ---- Arm visuals (unchanged) ----
+        # ---- Arm visuals ----
         self.arm.shoulder_angle = -90
         self.arm.elbow_angle = 0
         self.arm.c_arm = QColor("#8e44ad")
@@ -34,7 +34,7 @@ class PackagingTask(BaseTask):
         self._box_timer.timeout.connect(lambda: self.conveyor.spawn_box(color="orange"))
         """
 
-        # ===== Pick-cycle (like Sorting) =====
+        # ===== Pick-cycle =====
         self._pick_timer = QTimer(self)
         self._pick_timer.setInterval(16)  # ~60 FPS
         self._pick_timer.timeout.connect(self._tick_pick)
@@ -119,7 +119,7 @@ class PackagingTask(BaseTask):
     def _on_metrics(self, metrics):
         print("Packaging metrics:", metrics)
 
-    # ===== Arm poses (mirrors Sorting) =====
+    # ===== Arm poses =====
     def _pose_home(self):
         return (-90.0, -0.0)   # straight up
 
