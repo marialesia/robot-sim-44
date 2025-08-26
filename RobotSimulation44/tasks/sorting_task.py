@@ -4,8 +4,6 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 from .base_task import BaseTask, StorageContainerWidget
 from .sorting_logic import SortingWorker
-import random  # for picking a wrong bin on purpose when worker flags an error
-
 
 class SortingTask(BaseTask):
     def __init__(self):
@@ -99,6 +97,7 @@ class SortingTask(BaseTask):
         # Add the row to the same grid area where your containers were (row 3), span all 6 columns
         self.grid.addWidget(row, 3, 0, 1, 6, Qt.AlignHCenter | Qt.AlignTop)
 
+
         # Repaint
         self.arm.update()
         self.conveyor.update()
@@ -136,7 +135,6 @@ class SortingTask(BaseTask):
 
         # --- remember which container direction to "present" toward after lift ---
         self._target_slot = None  # one of: red/blue/green/purple/orange/teal
-        self._present_slot_override = None  # when worker says incorrect, we aim here
 
         # --- capture color at trigger-time to avoid races ---
         self._pending_color = None  # color captured exactly when the cycle starts
@@ -156,7 +154,6 @@ class SortingTask(BaseTask):
         self._pick_state = "idle"
         self._pick_t = 0
         self._target_slot = None  # reset target on start
-        self._present_slot_override = None
         self._pending_color = None
 
         # start arm pick monitor
@@ -168,9 +165,9 @@ class SortingTask(BaseTask):
         # ===== start the worker logic =====
         if not self.worker or not self.worker.isRunning():
             self.worker = SortingWorker(
-                pace="slow",        # "slow", "medium", or "fast"
+                pace="slow",      # "slow", "medium", or "fast"
                 bin_count=6,        # 2, 4, or 6 (your choice)
-                error_rate=0.1     # change how often the robot arm incorrectly sorts the boxes (%)
+                error_rate=0.1
             )
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.box_sorted.connect(self._on_box_sorted)
@@ -240,7 +237,7 @@ class SortingTask(BaseTask):
         if self._pick_state == "idle":
             if self._box_near_grip() and (self._now_ms - self._last_touch_time_ms) >= self._touch_cooldown_ms:
                 self._last_touch_time_ms = self._now_ms
-
+                
                 # Lock color & slot at trigger time (more reliable than sampling later)
                 self._pending_color = self._color_of_box_in_window()
                 self._target_slot = self._color_to_slot(self._pending_color) if self._pending_color else None
@@ -270,7 +267,7 @@ class SortingTask(BaseTask):
                 self._start_seg(self._pose_pick(), 120)
 
             elif self._pick_state == "descend":
-                # --- Trigger sorting only when arm reaches box ---
+                # --- trigger sorting only when arm reaches box ---
                 nearest_color = self._color_of_box_in_window()
                 if nearest_color:
                     hex_color = nearest_color.name() if hasattr(nearest_color, "name") else nearest_color
@@ -300,11 +297,10 @@ class SortingTask(BaseTask):
                 self._start_seg(self._pose_lift(), 120)
 
             elif self._pick_state == "lift":
-                # Prefer the worker's outcome if it has arrived (may point to a wrong bin)
-                slot_to_use = self._present_slot_override or self._target_slot
-                if slot_to_use:
+                # point toward the matching container before returning
+                if self._target_slot:
                     self._pick_state = "present"
-                    self._start_seg(self._pose_present(slot_to_use), 200)
+                    self._start_seg(self._pose_present(self._target_slot), 200)
                 else:
                     self._pick_state = "return"
                     self.arm.held_box_visible = False
@@ -323,7 +319,6 @@ class SortingTask(BaseTask):
                 self._pick_state = "idle_pause"
                 self._target_slot = None
                 self._pending_color = None
-                self._present_slot_override = None
                 self._start_seg(self._pose_home(), 40)
 
             elif self._pick_state == "idle_pause":
@@ -369,6 +364,7 @@ class SortingTask(BaseTask):
                 del colors[hit_index]
             self.conveyor.update()
 
+
     # --- helper to get nearest box color ---
     def _color_of_box_in_window(self):
         """Return the QColor of the first box currently inside the detection window (or None)."""
@@ -404,36 +400,13 @@ class SortingTask(BaseTask):
             return "teal"
         return None
 
-    # Pick a wrong bin (used when worker flags an incorrect sort)
-    def _wrong_slot_for(self, slot):
-        candidates = ["red", "blue", "green", "purple", "orange", "teal"]
-        try:
-            candidates.remove(slot)
-        except ValueError:
-            pass
-        return random.choice(candidates) if candidates else slot
-
-    # ===== Worker signal handlers =====
     def _on_box_spawned(self, box_data):
         color = box_data["color"]
         error = box_data["error"]
 
     def _on_box_sorted(self, color, correct):
-        # color is a string like "red", "blue", etc.
-        valid = {"red", "blue", "green", "purple", "orange", "teal"}
-        if color not in valid:
-            return
-
-        if correct:
-            self._present_slot_override = color
-            into = color
-        else:
-            wrong = self._wrong_slot_for(color)
-            self._present_slot_override = wrong
-            into = wrong
-
-        outcome = "✅ correct" if correct else f"❌ error (expected {color})"
-        print(f"sorted {color} into {into} {outcome}")
+        print(f"Sorted {color} {'✅' if correct else '❌'}")
+        # SHOULD BE UPDATED TO BE IN GUI INSTEAD LATER ----------
 
     def _on_metrics(self, metrics):
         print("Final metrics:", metrics)
@@ -442,5 +415,7 @@ class SortingTask(BaseTask):
         """Called when worker wants to spawn a box."""
         color = box_data["color"]
         error = box_data["error"]
+
         # Spawn the box with color and error info
+        # Make sure conveyor.spawn_box accepts these parameters
         self.conveyor.spawn_box(color=color, error=error)
