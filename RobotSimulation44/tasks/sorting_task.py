@@ -1,7 +1,7 @@
 ﻿# tasks/sorting_task.py
 from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
+from PyQt5.QtCore import Qt, QTimer, QEvent
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy, QLabel
 from .base_task import BaseTask, StorageContainerWidget
 from .sorting_logic import SortingWorker
 import random  # for picking a wrong bin on purpose when worker flags an error
@@ -99,6 +99,48 @@ class SortingTask(BaseTask):
         # Add the row to the same grid area where your containers were (row 3), span all 6 columns
         self.grid.addWidget(row, 3, 0, 1, 6, Qt.AlignHCenter | Qt.AlignTop)
 
+        # --- Clickable containers: map slot -> widget and install event filters ---
+        self._slot_to_widget = {
+            "red":    self.container_red,
+            "blue":   self.container_blue,
+            "green":  self.container_green,
+            "purple": self.container_purple,
+            "orange": self.container_orange,
+            "teal":   self.container_teal,
+        }
+        for slot, w in self._slot_to_widget.items():
+            w._slot = slot  # tag widget for click handling
+            w.installEventFilter(self)
+
+        # --- Error move model ---
+        self._errors = {}                                # id -> {id,color,actual,current}
+        self._bin_errors = {k: [] for k in self._slot_to_widget.keys()}  # slot -> [ids]
+        self._next_eid = 1
+        self._selected_error = None                      # currently “picked up” error id (or None)
+
+        # Save original borders so we can highlight & restore
+        self._orig_borders = {k: w.border for k, w in self._slot_to_widget.items()}
+
+        # Color map for error colors
+        self._slot_color_map = {
+            "red": QColor("#c82828"),
+            "blue": QColor("#2b4a91"),
+            "green": QColor("#1f7a3a"),
+            "purple": QColor("#6a1b9a"),
+            "orange": QColor("#c15800"),
+            "teal": QColor("#b8efe6"),
+        }
+
+        # ---- Exclamation badges (one per bin) ----
+        self._badges = {}
+        self._create_error_badges()
+
+        # ---- Flashing outline timer for bins with errors ----
+        self._flash_on = False
+        self._flash_timer = QTimer(self)
+        self._flash_timer.setInterval(350)   # speed of flash
+        self._flash_timer.timeout.connect(self._flash_tick)
+
         # Repaint
         self.arm.update()
         self.conveyor.update()
@@ -165,6 +207,10 @@ class SortingTask(BaseTask):
             self._set_arm(sh, el)
             self._pick_timer.start()
 
+        # start flashing timer
+        if not self._flash_timer.isActive():
+            self._flash_timer.start()
+
         # ===== start the worker logic =====
         if not self.worker or not self.worker.isRunning():
             self.worker = SortingWorker(
@@ -183,12 +229,28 @@ class SortingTask(BaseTask):
             self._box_timer.stop()
         if self._pick_timer.isActive():
             self._pick_timer.stop()
+        if self._flash_timer.isActive():
+            self._flash_timer.stop()
+
+        # reset borders and hide badges
+        for slot, w in self._slot_to_widget.items():
+            w.border = self._orig_borders.get(slot, w.border)
+            w.update()
+        for b in self._badges.values():
+            b.hide()
+
         # return arm to home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
         # clear any held-box visual on stop
         self.arm.held_box_visible = False
         self.arm.update()
+
+        # clear highlight if any selection
+        if self._selected_error is not None:
+            for slot in self._slot_to_widget.keys():
+                self._highlight_bin(slot, False)
+            self._selected_error = None
 
         # ===== stop the worker logic =====
         if self.worker and self.worker.isRunning():
@@ -413,6 +475,166 @@ class SortingTask(BaseTask):
             pass
         return random.choice(candidates) if candidates else slot
 
+    # ===== Click handling / event filter =====
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.MouseButtonPress:
+            slot = getattr(obj, "_slot", None)
+            if slot:
+                self._on_container_clicked(slot)
+                return True
+        elif event.type() == QEvent.Resize:
+            # Keep the badge centered at the top inside each container
+            slot = getattr(obj, "_slot", None)
+            if slot:
+                self._position_badge(slot)
+        return super().eventFilter(obj, event)
+
+    def _highlight_bin(self, slot, on):
+        w = self._slot_to_widget.get(slot)
+        if not w:
+            return
+        if on:
+            w.border = QColor("#ffbf00")  # amber highlight while “holding”
+        else:
+            w.border = self._orig_borders.get(slot, w.border)
+        w.update()
+
+    def _current_selected_slot(self):
+        """Return the slot of the currently selected (held) error, if any."""
+        if self._selected_error is None:
+            return None
+        rec = self._errors.get(self._selected_error)
+        return rec['current'] if rec else None
+
+    # ---- badges ----
+    def _create_error_badges(self):
+        """Create a small colored '!' badge for each bin (initially hidden)."""
+        for slot, w in self._slot_to_widget.items():
+            lbl = QLabel("!", w)
+            lbl.setFixedSize(22, 22)
+            lbl.setAlignment(Qt.AlignCenter)
+            lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            lbl.setStyleSheet(
+                "color: white; background: rgba(0,0,0,0); border-radius: 11px; "
+                "font-weight: 800; font-size: 14px;"
+            )
+            lbl.hide()
+            self._badges[slot] = lbl
+            self._position_badge(slot)
+
+    def _position_badge(self, slot):
+        """Center the badge along the top inside the container."""
+        w = self._slot_to_widget.get(slot)
+        b = self._badges.get(slot)
+        if not w or not b:
+            return
+        x = (w.width() - b.width()) // 2
+        y = 2  # just inside the top edge
+        b.move(max(0, x), max(0, y))
+
+    def _apply_flash_colors(self):
+        """Apply flashing borders per-bin based on oldest unresolved error, and update badges."""
+        selected_slot = self._current_selected_slot()
+        for slot, w in self._slot_to_widget.items():
+            ids = self._bin_errors.get(slot, [])
+            badge = self._badges.get(slot)
+
+            if ids:
+                head = ids[0]
+                rec = self._errors.get(head)
+                if rec:
+                    # Border flashing
+                    flash_q = self._slot_color_map.get(
+                        rec['color'], self._orig_borders.get(slot, w.border)
+                    )
+                    if slot != selected_slot:  # selection highlight takes priority
+                        w.border = flash_q if self._flash_on else self._orig_borders.get(slot, w.border)
+                        w.update()
+
+                    # Badge: solid colored circle with white "!"
+                    if badge:
+                        q = self._slot_color_map.get(rec['color'])
+                        if q:
+                            badge.setStyleSheet(
+                                "color: white; "
+                                f"background: {q.name()}; "
+                                f"border: 2px solid {q.darker(130).name()}; "
+                                "border-radius: 11px; font-weight: 800; font-size: 14px;"
+                            )
+                            badge.show()
+            else:
+                # No errors -> restore original + hide badge
+                if w.border != self._orig_borders.get(slot, w.border) and slot != selected_slot:
+                    w.border = self._orig_borders.get(slot, w.border)
+                    w.update()
+                if badge:
+                    badge.hide()
+
+    def _flash_tick(self):
+        self._flash_on = not self._flash_on
+        self._apply_flash_colors()
+
+    def _on_container_clicked(self, slot):
+        # No selection yet: try to pick one error from this wrong bin
+        if self._selected_error is None:
+            ids = self._bin_errors.get(slot, [])
+            if not ids:
+                print(f"(No errors in {slot} to pick up)")
+                return
+            eid = ids.pop(0)  # FIFO: one error per click
+            rec = self._errors.get(eid)
+            if not rec:
+                return
+            self._selected_error = eid
+            self._highlight_bin(slot, True)
+            print(f"Picked error #{eid}: {rec['color']} currently in {slot}. "
+                  f"Click the correct container ({rec['actual']}).")
+            # update flashing/badges immediately (selected bin should stop flashing)
+            self._apply_flash_colors()
+            return
+
+        # We’re holding an error; drop it onto the clicked bin
+        eid = self._selected_error
+        rec = self._errors.get(eid)
+        if not rec:
+            self._selected_error = None
+            self._apply_flash_colors()
+            return
+
+        # Remove highlight from previous bin
+        self._highlight_bin(rec['current'], False)
+        prev = rec['current']
+        new_slot = slot
+
+        # Clean up any stale membership from previous bin
+        try:
+            if eid in self._bin_errors.get(prev, []):
+                self._bin_errors[prev].remove(eid)
+        except ValueError:
+            pass
+
+        rec['current'] = new_slot
+
+        if new_slot == rec['actual']:
+            # Resolved!
+            print(f"Resolved error #{eid}: moved {rec['color']} to {new_slot} ✅")
+            try:
+                if eid in self._bin_errors.get(new_slot, []):
+                    self._bin_errors[new_slot].remove(eid)
+            except ValueError:
+                pass
+            del self._errors[eid]
+            self._selected_error = None
+        else:
+            # Still wrong: place into this bin and keep “holding” it
+            self._bin_errors[new_slot].append(eid)
+            self._selected_error = eid
+            self._highlight_bin(new_slot, True)
+            print(f"Moved error #{eid} onto {new_slot} (needs {rec['actual']}). Click again to fix.")
+
+        # Refresh flashing + badges to reflect new oldest-error colors per bin
+        self._apply_flash_colors()
+
     # ===== Worker signal handlers =====
     def _on_box_spawned(self, box_data):
         color = box_data["color"]
@@ -427,14 +649,23 @@ class SortingTask(BaseTask):
         if correct:
             self._present_slot_override = color
             into = color
+            print(f"Sorting Task: sorted {color} into {into} ✅ correct")
         else:
-            wrong = self._wrong_slot_for(color)
+            wrong = self._present_slot_override or self._wrong_slot_for(color)
             self._present_slot_override = wrong
             into = wrong
 
-        outcome = "✅ correct" if correct else f"❌ error (expected {color})"
-        print(f"Sorting Task: sorted {color} into {into} {outcome}")
+            # create an error record living in the wrong bin
+            eid = self._next_eid
+            self._next_eid += 1
+            rec = {"id": eid, "color": color, "actual": color, "current": into}
+            self._errors[eid] = rec
+            self._bin_errors[into].append(eid)
 
+            print(f"Sorting Task: sorted {color} into {into} ❌ error (expected {color})")
+
+            # Update flashing/badges immediately so the bin shows this (oldest) error color
+            self._apply_flash_colors()
 
     def _on_metrics(self, metrics):
         print("Final metrics:", metrics)
