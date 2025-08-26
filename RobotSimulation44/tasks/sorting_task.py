@@ -433,7 +433,7 @@ class SortingTask(BaseTask):
             into = wrong
 
         outcome = "✅ correct" if correct else f"❌ error (expected {color})"
-        print(f"sorted {color} into {into} {outcome}")
+        print(f"Sorting Task - sorted {color} into {into} {outcome}")
 
     def _on_metrics(self, metrics):
         print("Final metrics:", metrics)
