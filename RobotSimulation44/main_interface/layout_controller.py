@@ -1,6 +1,7 @@
 # main_interface/layout_controller.py
 from PyQt5.QtWidgets import QHBoxLayout
 from PyQt5.QtCore import Qt
+from event_logger import get_logger 
 
 class LayoutController:
     def __init__(self, parent_layout, task_manager, status_label=None):
@@ -42,7 +43,6 @@ class LayoutController:
                 f"Active tasks: {', '.join(active_tasks) if active_tasks else 'None'}"
             )
 
-
     def start_tasks(self):
         """Start all tasks that have a 'start' method."""
         for task in self.task_manager.task_instances.values():
@@ -50,8 +50,15 @@ class LayoutController:
                 task.start()
 
     def stop_tasks(self):
-        """Stop all tasks that have a 'stop' method."""
+        """Stop all tasks that have a 'stop' method', then write CSV log."""
         for task in self.task_manager.task_instances.values():
             if hasattr(task, "stop"):
                 task.stop()
 
+        # --- Dump buffered events to CSV on Pause --- 
+        path = get_logger().dump_csv()
+        if self.status_label:
+            if path:
+                self.status_label.setText(f"Paused. Log saved to: {path}")
+            else:
+                self.status_label.setText("Paused. (No events to log.)")

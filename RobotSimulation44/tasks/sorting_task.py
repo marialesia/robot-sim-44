@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy, QLabel
 from .base_task import BaseTask, StorageContainerWidget
 from .sorting_logic import SortingWorker
 import random  # for picking a wrong bin on purpose when worker flags an error
+from event_logger import get_logger 
 
 
 class SortingTask(BaseTask):
@@ -575,11 +576,15 @@ class SortingTask(BaseTask):
         self._apply_flash_colors()
 
     def _on_container_clicked(self, slot):
+        # Always log the user click
+        get_logger().log_user("Sorting", f"container_{slot}", "click", "container clicked")
+
         # No selection yet: try to pick one error from this wrong bin
         if self._selected_error is None:
             ids = self._bin_errors.get(slot, [])
             if not ids:
-                print(f"(No errors in {slot} to pick up)")
+                print(f"(Sorting Task: No errors in {slot} to pick up)")
+                get_logger().log_user("Sorting", f"container_{slot}", "click", "no errors to pick up")
                 return
             eid = ids.pop(0)  # FIFO: one error per click
             rec = self._errors.get(eid)
@@ -587,8 +592,10 @@ class SortingTask(BaseTask):
                 return
             self._selected_error = eid
             self._highlight_bin(slot, True)
-            print(f"Picked error #{eid}: {rec['color']} currently in {slot}. "
-                  f"Click the correct container ({rec['actual']}).")
+            msg = (f"Sorting Task: Picked error #{eid}: {rec['color']} currently in {slot}. "
+                   f"Click the correct container ({rec['actual']}).")
+            print(msg)
+            get_logger().log_user("Sorting", f"container_{slot}", "pick", f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
             # update flashing/badges immediately (selected bin should stop flashing)
             self._apply_flash_colors()
             return
@@ -617,7 +624,8 @@ class SortingTask(BaseTask):
 
         if new_slot == rec['actual']:
             # Resolved!
-            print(f"Resolved error #{eid}: moved {rec['color']} to {new_slot} ✅")
+            print(f"Sorting Task: Resolved error #{eid}: moved {rec['color']} to {new_slot} ✅")
+            get_logger().log_user("Sorting", f"container_{new_slot}", "drop", f"resolved eid={eid}, color={rec['color']}")
             try:
                 if eid in self._bin_errors.get(new_slot, []):
                     self._bin_errors[new_slot].remove(eid)
@@ -630,7 +638,8 @@ class SortingTask(BaseTask):
             self._bin_errors[new_slot].append(eid)
             self._selected_error = eid
             self._highlight_bin(new_slot, True)
-            print(f"Moved error #{eid} onto {new_slot} (needs {rec['actual']}). Click again to fix.")
+            print(f"Sorting Task: Moved error #{eid} onto {new_slot} (needs {rec['actual']}). Click again to fix.")
+            get_logger().log_user("Sorting", f"container_{new_slot}", "drop", f"still wrong eid={eid}, needs={rec['actual']}")
 
         # Refresh flashing + badges to reflect new oldest-error colors per bin
         self._apply_flash_colors()
@@ -649,7 +658,9 @@ class SortingTask(BaseTask):
         if correct:
             self._present_slot_override = color
             into = color
-            print(f"Sorting Task: sorted {color} into {into} ✅ correct")
+            msg = f"Sorting Task: sorted {color} into {into} ✅ correct"
+            print(msg)
+            get_logger().log_robot("Sorting", msg) 
         else:
             wrong = self._present_slot_override or self._wrong_slot_for(color)
             self._present_slot_override = wrong
@@ -662,7 +673,9 @@ class SortingTask(BaseTask):
             self._errors[eid] = rec
             self._bin_errors[into].append(eid)
 
-            print(f"Sorting Task: sorted {color} into {into} ❌ error (expected {color})")
+            msg = f"Sorting Task: sorted {color} into {into} ❌ error (expected {color})"
+            print(msg)
+            get_logger().log_robot("Sorting", msg)
 
             # Update flashing/badges immediately so the bin shows this (oldest) error color
             self._apply_flash_colors()
