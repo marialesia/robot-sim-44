@@ -170,7 +170,7 @@ class SortingTask(BaseTask):
             self.worker = SortingWorker(
                 pace="slow",        # "slow", "medium", or "fast"
                 bin_count=6,        # 2, 4, or 6 (your choice)
-                error_rate=0.8      # alters the rate the robot arm incorrectly sorts the boxes (%)
+                error_rate=0.1      # alters the rate the robot arm incorrectly sorts the boxes (%)
             )
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.box_sorted.connect(self._on_box_sorted)
@@ -433,7 +433,7 @@ class SortingTask(BaseTask):
             into = wrong
 
         outcome = "✅ correct" if correct else f"❌ error (expected {color})"
-        print(f"sorted {color} into {into} {outcome}")
+        print(f"Sorting Task: sorted {color} into {into} {outcome}")
 
 
     def _on_metrics(self, metrics):
