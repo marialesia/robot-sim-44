@@ -579,7 +579,7 @@ class SortingTask(BaseTask):
         if self._selected_error is None:
             ids = self._bin_errors.get(slot, [])
             if not ids:
-                print(f"(No errors in {slot} to pick up)")
+                print(f"(Sorting Task: No errors in {slot} to pick up)")
                 return
             eid = ids.pop(0)  # FIFO: one error per click
             rec = self._errors.get(eid)
@@ -587,8 +587,8 @@ class SortingTask(BaseTask):
                 return
             self._selected_error = eid
             self._highlight_bin(slot, True)
-            print(f"Picked error #{eid}: {rec['color']} currently in {slot}. "
-                  f"Click the correct container ({rec['actual']}).")
+            print(f"Sorting Task: Picked error #{eid}: {rec['color']} currently in {slot}. "
+                  f"Sorting Task: Click the correct container ({rec['actual']}).")
             # update flashing/badges immediately (selected bin should stop flashing)
             self._apply_flash_colors()
             return
@@ -617,7 +617,7 @@ class SortingTask(BaseTask):
 
         if new_slot == rec['actual']:
             # Resolved!
-            print(f"Resolved error #{eid}: moved {rec['color']} to {new_slot} ✅")
+            print(f"Sorting Task: Resolved error #{eid}: moved {rec['color']} to {new_slot} ✅")
             try:
                 if eid in self._bin_errors.get(new_slot, []):
                     self._bin_errors[new_slot].remove(eid)
@@ -630,7 +630,7 @@ class SortingTask(BaseTask):
             self._bin_errors[new_slot].append(eid)
             self._selected_error = eid
             self._highlight_bin(new_slot, True)
-            print(f"Moved error #{eid} onto {new_slot} (needs {rec['actual']}). Click again to fix.")
+            print(f"Sorting Task: Moved error #{eid} onto {new_slot} (needs {rec['actual']}). Click again to fix.")
 
         # Refresh flashing + badges to reflect new oldest-error colors per bin
         self._apply_flash_colors()
