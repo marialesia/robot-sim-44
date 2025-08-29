@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel
 from .task_manager import TaskManager
 from .observer_control import ObserverControl
 from .layout_controller import LayoutController
+from .metrics_manager import MetricsManager 
 
 class UserSystemWindow(QMainWindow):
     def __init__(self, task_manager):
@@ -40,3 +41,7 @@ class ObserverSystemWindow(QMainWindow):
 
         # Observer controls
         self.observer_control = ObserverControl(self.main_layout)
+
+        # Metrics manager (bottom)
+        self.metrics_manager = MetricsManager()
+        self.main_layout.addWidget(self.metrics_manager)
