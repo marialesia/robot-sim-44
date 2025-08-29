@@ -224,6 +224,39 @@ class SortingTask(BaseTask):
             self.worker.metrics_ready.connect(self._on_metrics)
             self.worker.start()
 
+    def pause(self):
+        self.conveyor.enable_motion(False)
+        if self._box_timer.isActive():
+            self._box_timer.stop()
+        if self._pick_timer.isActive():
+            self._pick_timer.stop()
+        if self._flash_timer.isActive():
+            self._flash_timer.stop()
+
+        # reset borders and hide badges
+        for slot, w in self._slot_to_widget.items():
+            w.border = self._orig_borders.get(slot, w.border)
+            w.update()
+        for b in self._badges.values():
+            b.hide()
+
+        # return arm to home
+        sh, el = self._pose_home()
+        self._set_arm(sh, el)
+        # clear any held-box visual on pause
+        self.arm.held_box_visible = False
+        self.arm.update()
+
+        # clear highlight if any selection
+        if self._selected_error is not None:
+            for slot in self._slot_to_widget.keys():
+                self._highlight_bin(slot, False)
+            self._selected_error = None
+
+        # ===== pause the worker logic =====
+        if self.worker and self.worker.isRunning():
+            self.worker.pause()
+
     def stop(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
