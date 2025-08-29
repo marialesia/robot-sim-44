@@ -104,3 +104,21 @@ class ObserverControl(QObject):
         if value.endswith("%"):
             return int(value[:-1]) / 100.0
         return 0.0
+
+    def get_params_for_task(self, task_name):
+        """Return a dict of parameters for a given task name."""
+        task_name = task_name.lower()
+        if task_name == "sorting":
+            return {
+                "pace": self.get_pace(),
+                "bin_count": self.get_bin_count(),
+                "error_rate": self.get_error_rate(),
+            }
+        elif task_name == "packaging":
+            # return packaging-specific params
+            return {}
+        elif task_name == "inspection":
+            # return inspection-specific params
+            return {}
+        else:
+            return {}

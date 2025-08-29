@@ -188,7 +188,7 @@ class SortingTask(BaseTask):
         self.worker = None
 
     # ===== Called by your existing GUI =====
-    def start(self, observer_control=None):
+    def start(self, pace=None, bin_count=None, error_rate=None):
         # belt motion
         self.conveyor.setBeltSpeed(120)   # left -> right
         self.conveyor.enable_motion(True)
@@ -214,10 +214,6 @@ class SortingTask(BaseTask):
 
         # ===== start the worker logic =====
         if not self.worker or not self.worker.isRunning():
-            pace = observer_control.get_pace()
-            bin_count = observer_control.get_bin_count()
-            error_rate = observer_control.get_error_rate()
-
             self.worker = SortingWorker(
                 pace=pace,
                 bin_count=bin_count,

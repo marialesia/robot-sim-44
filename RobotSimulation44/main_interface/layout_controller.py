@@ -48,7 +48,22 @@ class LayoutController:
         """Start all tasks that have a 'start' method."""
         for task in self.task_manager.task_instances.values():
             if hasattr(task, "start"):
-                task.start(self.observer_control)
+                params = {}
+                if self.observer_control:
+                    # Check the task type
+                    class_name = task.__class__.__name__
+                    if class_name == "SortingTask":
+                        params = self.observer_control.get_params_for_task("sorting")
+                    elif class_name == "PackagingTask":
+                        params = self.observer_control.get_params_for_task("packaging")
+                    elif class_name == "InspectionTask":
+                        params = self.observer_control.get_params_for_task("inspection")
+                    # else leave params empty for tasks with no parameters
+
+                if params:
+                    task.start(**params)
+                else:
+                    task.start()
 
     def stop_tasks(self):
         """Stop all tasks that have a 'stop' method', then write CSV log."""
