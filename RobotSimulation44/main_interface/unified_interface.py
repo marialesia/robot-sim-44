@@ -22,7 +22,7 @@ class UnifiedInterface(QMainWindow):
         self.observer_control = ObserverControl(self.main_layout)
 
         # Workspace area (middle)
-        self.layout_controller = LayoutController(self.main_layout, self.task_manager)
+        self.layout_controller = LayoutController(self.main_layout, self.task_manager, observer_control=self.observer_control)
 
         # Status label (bottom)
         self.status_label = QLabel("Select tasks to begin.")

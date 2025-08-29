@@ -1,5 +1,5 @@
 # main_interface/observer_control.py
-from PyQt5.QtWidgets import QHBoxLayout, QCheckBox, QPushButton
+from PyQt5.QtWidgets import QHBoxLayout, QCheckBox, QPushButton, QComboBox, QLabel
 from PyQt5.QtCore import QObject, pyqtSignal
 from event_logger import get_logger
 
@@ -28,6 +28,29 @@ class ObserverControl(QObject):
         self.control_bar.addWidget(self.sorting_checkbox)
         self.control_bar.addWidget(self.packaging_checkbox)
         self.control_bar.addWidget(self.inspection_checkbox)
+
+        # ===== New controls for Sorting Parameters =====
+        param_layout = QHBoxLayout()
+
+        # Pace dropdown
+        self.pace_dropdown = QComboBox()
+        self.pace_dropdown.addItems(["slow", "medium", "fast"])
+        param_layout.addWidget(QLabel("Pace:"))
+        param_layout.addWidget(self.pace_dropdown)
+
+        # Bin Count dropdown
+        self.bin_dropdown = QComboBox()
+        self.bin_dropdown.addItems(["2", "4", "6"])
+        param_layout.addWidget(QLabel("Bins:"))
+        param_layout.addWidget(self.bin_dropdown)
+
+        # Error Rate dropdown
+        self.error_dropdown = QComboBox()
+        self.error_dropdown.addItems(["0%", "5%", "10%", "20%"])
+        param_layout.addWidget(QLabel("Error Rate:"))
+        param_layout.addWidget(self.error_dropdown)
+
+        self.control_bar.addLayout(param_layout)
 
         # Start / Pause buttons
         self.start_button = QPushButton("Start")
@@ -68,3 +91,16 @@ class ObserverControl(QObject):
         if self.inspection_checkbox.isChecked():
             active_tasks.append("inspection")
         self.tasks_changed.emit(active_tasks)
+
+    def get_pace(self):
+        return self.pace_dropdown.currentText()
+
+    def get_bin_count(self):
+        return int(self.bin_dropdown.currentText())
+
+    def get_error_rate(self):
+        # strip '%' and convert to decimal fraction
+        value = self.error_dropdown.currentText()
+        if value.endswith("%"):
+            return int(value[:-1]) / 100.0
+        return 0.0

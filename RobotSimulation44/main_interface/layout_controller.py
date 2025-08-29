@@ -4,9 +4,10 @@ from PyQt5.QtCore import Qt
 from event_logger import get_logger 
 
 class LayoutController:
-    def __init__(self, parent_layout, task_manager, status_label=None):
+    def __init__(self, parent_layout, task_manager, status_label=None, observer_control=None):
         self.task_manager = task_manager
         self.status_label = status_label
+        self.observer_control = observer_control
 
         # Workspace layout
         self.workspace_area = QHBoxLayout()
@@ -47,7 +48,7 @@ class LayoutController:
         """Start all tasks that have a 'start' method."""
         for task in self.task_manager.task_instances.values():
             if hasattr(task, "start"):
-                task.start()
+                task.start(self.observer_control)
 
     def stop_tasks(self):
         """Stop all tasks that have a 'stop' method', then write CSV log."""

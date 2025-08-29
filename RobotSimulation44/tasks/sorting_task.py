@@ -188,7 +188,7 @@ class SortingTask(BaseTask):
         self.worker = None
 
     # ===== Called by your existing GUI =====
-    def start(self):
+    def start(self, observer_control=None):
         # belt motion
         self.conveyor.setBeltSpeed(120)   # left -> right
         self.conveyor.enable_motion(True)
@@ -214,10 +214,14 @@ class SortingTask(BaseTask):
 
         # ===== start the worker logic =====
         if not self.worker or not self.worker.isRunning():
+            pace = observer_control.get_pace()
+            bin_count = observer_control.get_bin_count()
+            error_rate = observer_control.get_error_rate()
+
             self.worker = SortingWorker(
-                pace="slow",        # "slow", "medium", or "fast"
-                bin_count=6,        # 2, 4, or 6 (your choice)
-                error_rate=0.1      # alters the rate the robot arm incorrectly sorts the boxes (%)
+                pace=pace,
+                bin_count=bin_count,
+                error_rate=error_rate
             )
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.box_sorted.connect(self._on_box_sorted)
