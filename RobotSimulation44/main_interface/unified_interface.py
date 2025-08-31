@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel
 from .task_manager import TaskManager
 from .observer_control import ObserverControl
 from .layout_controller import LayoutController
-from .metrics_manager import MetricsManager 
+from .metrics_manager import MetricsManager
 
 class UserSystemWindow(QMainWindow):
     def __init__(self, task_manager):
@@ -45,3 +45,7 @@ class ObserverSystemWindow(QMainWindow):
         # Metrics manager (bottom)
         self.metrics_manager = MetricsManager()
         self.main_layout.addWidget(self.metrics_manager)
+
+        # Pass the metrics manager down to task manager so all tasks can use it
+        if hasattr(self.task_manager, "set_metrics_manager"):
+            self.task_manager.set_metrics_manager(self.metrics_manager)

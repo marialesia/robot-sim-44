@@ -213,7 +213,8 @@ class SortingTask(BaseTask):
             self._flash_timer.start()
 
         # ===== start the worker logic =====
-        if not self.worker or not self.worker.isRunning():
+        if self.worker is None:
+            # first time: create worker
             self.worker = SortingWorker(
                 pace=pace,
                 bin_count=bin_count,
@@ -221,8 +222,13 @@ class SortingTask(BaseTask):
             )
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.box_sorted.connect(self._on_box_sorted)
-            self.worker.metrics_ready.connect(self._on_metrics)
+            self.worker.metrics_live.connect(self._on_metrics_live)
             self.worker.start()
+        elif not self.worker.isRunning():
+            # worker exists but was paused: resume
+            self.worker.running = True
+            if not self.worker.isRunning():
+                self.worker.start()
 
     def pause(self):
         self.conveyor.enable_motion(False)
@@ -727,8 +733,13 @@ class SortingTask(BaseTask):
             # Update flashing/badges immediately so the bin shows this (oldest) error color
             self._apply_flash_colors()
 
-    def _on_metrics(self, metrics):
-        print("Final metrics:", metrics)
+    def _on_metrics_live(self, metrics):
+        """Receive live metrics from the worker and update MetricsManager in real time."""
+        if hasattr(self, "metrics_manager") and self.metrics_manager:
+            self.metrics_manager.update_metrics(metrics)
+        else:
+            # fallback for debugging
+            print("Live metrics:", metrics)
 
     def spawn_box_from_worker(self, box_data):
         """Called when worker wants to spawn a box."""

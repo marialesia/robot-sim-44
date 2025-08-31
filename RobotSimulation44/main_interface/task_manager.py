@@ -17,17 +17,28 @@ class TaskManager:
             if task == "sorting":
                 if "sorting" not in self.task_instances:
                     self.task_instances["sorting"] = SortingTask()
+                    # attach metrics manager if available
+                    if hasattr(self, "metrics_manager"):
+                        self.task_instances["sorting"].metrics_manager = self.metrics_manager
                 panels.append(self.task_instances["sorting"])
 
             elif task == "packaging":
                 if "packaging" not in self.task_instances:
                     self.task_instances["packaging"] = PackagingTask()
+                    if hasattr(self, "metrics_manager"):
+                        self.task_instances["packaging"].metrics_manager = self.metrics_manager
                 panels.append(self.task_instances["packaging"])
 
             elif task == "inspection":
                 if "inspection" not in self.task_instances:
                     self.task_instances["inspection"] = InspectionTask()
+                    if hasattr(self, "metrics_manager"):
+                        self.task_instances["inspection"].metrics_manager = self.metrics_manager
                 panels.append(self.task_instances["inspection"])
 
         return panels
+
+    
+    def set_metrics_manager(self, metrics_manager):
+        self.metrics_manager = metrics_manager
 
