@@ -7,7 +7,6 @@ class ObserverControl(QObject):
     # Signals to communicate with layout controller
     tasks_changed = pyqtSignal(list)
     start_pressed = pyqtSignal()
-    pause_pressed = pyqtSignal()
     stop_pressed = pyqtSignal()
 
     def __init__(self, parent_layout):
@@ -55,24 +54,18 @@ class ObserverControl(QObject):
 
         # Start / Pause buttons
         self.start_button = QPushButton("Start")
-        self.pause_button = QPushButton("Pause") 
-        self.stop_button = QPushButton("Stop")
+        self.stop_button = QPushButton("Pause")  # behaves like pause
         self.start_button.clicked.connect(lambda: self.start_pressed.emit())
-        self.pause_button.clicked.connect(lambda: self.pause_pressed.emit())
         self.stop_button.clicked.connect(lambda: self.stop_pressed.emit())
         self.control_bar.addWidget(self.start_button)
-        self.control_bar.addWidget(self.pause_button)
         self.control_bar.addWidget(self.stop_button)
 
         # --- Logging for top bar user actions ---  # <<< NEW
         self.start_button.clicked.connect(
             lambda: get_logger().log_user("TopBar", "Start button", "click", "Start pressed")
         )
-        self.pause_button.clicked.connect(
-            lambda: get_logger().log_user("TopBar", "Pause button", "click", "Pause pressed")
-        )
         self.stop_button.clicked.connect(
-            lambda: get_logger().log_user("TopBar", "Stop button", "click", "Stop pressed")
+            lambda: get_logger().log_user("TopBar", "Pause button", "click", "Pause pressed")
         )
         self.sorting_checkbox.stateChanged.connect(
             lambda s: get_logger().log_user("TopBar", "Sorting checkbox", "toggle",
