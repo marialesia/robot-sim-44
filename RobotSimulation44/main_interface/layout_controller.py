@@ -1,7 +1,7 @@
 # main_interface/layout_controller.py
 from PyQt5.QtWidgets import QHBoxLayout
 from PyQt5.QtCore import Qt
-from event_logger import get_logger 
+from event_logger import get_logger  # <<< NEW
 
 class LayoutController:
     def __init__(self, parent_layout, task_manager, status_label=None):
@@ -55,7 +55,7 @@ class LayoutController:
             if hasattr(task, "stop"):
                 task.stop()
 
-        # --- Dump buffered events to CSV on Pause --- 
+        # --- Dump buffered events to CSV on Pause ---  # <<< NEW
         path = get_logger().dump_csv()
         if self.status_label:
             if path:
