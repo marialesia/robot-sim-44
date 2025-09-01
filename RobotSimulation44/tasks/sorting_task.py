@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy, QLabel
 from .base_task import BaseTask, StorageContainerWidget
 from .sorting_logic import SortingWorker
 import random  # for picking a wrong bin on purpose when worker flags an error
-from event_logger import get_logger 
+from event_logger import get_logger  # <<< NEW
 
 
 class SortingTask(BaseTask):
@@ -660,7 +660,7 @@ class SortingTask(BaseTask):
             into = color
             msg = f"Sorting Task: sorted {color} into {into} ✅ correct"
             print(msg)
-            get_logger().log_robot("Sorting", msg) 
+            get_logger().log_robot("Sorting", msg)  # <<< NEW
         else:
             wrong = self._present_slot_override or self._wrong_slot_for(color)
             self._present_slot_override = wrong
@@ -675,7 +675,7 @@ class SortingTask(BaseTask):
 
             msg = f"Sorting Task: sorted {color} into {into} ❌ error (expected {color})"
             print(msg)
-            get_logger().log_robot("Sorting", msg)
+            get_logger().log_robot("Sorting", msg)  # <<< NEW
 
             # Update flashing/badges immediately so the bin shows this (oldest) error color
             self._apply_flash_colors()

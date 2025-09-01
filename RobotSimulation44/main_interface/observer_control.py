@@ -1,7 +1,7 @@
 # main_interface/observer_control.py
 from PyQt5.QtWidgets import QHBoxLayout, QCheckBox, QPushButton, QComboBox, QLabel
 from PyQt5.QtCore import QObject, pyqtSignal
-from event_logger import get_logger
+from event_logger import get_logger  # <<< NEW
 
 class ObserverControl(QObject):
     # Signals to communicate with layout controller
