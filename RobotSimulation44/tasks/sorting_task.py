@@ -213,7 +213,8 @@ class SortingTask(BaseTask):
             self._flash_timer.start()
 
         # ===== start the worker logic =====
-        if not self.worker or not self.worker.isRunning():
+        if self.worker is None:
+            # first time: create worker
             self.worker = SortingWorker(
                 pace=pace,
                 bin_count=bin_count,
@@ -221,17 +222,31 @@ class SortingTask(BaseTask):
             )
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.box_sorted.connect(self._on_box_sorted)
-            self.worker.metrics_ready.connect(self._on_metrics)
+            self.worker.metrics_live.connect(self._on_metrics_live)
             self.worker.start()
+        elif not self.worker.isRunning():
+            # worker exists but was paused: resume
+            self.worker.running = True
+            if not self.worker.isRunning():
+                self.worker.start()
 
     def stop(self):
+        # ===== stop motions =====
         self.conveyor.enable_motion(False)
+
         if self._box_timer.isActive():
             self._box_timer.stop()
         if self._pick_timer.isActive():
             self._pick_timer.stop()
         if self._flash_timer.isActive():
             self._flash_timer.stop()
+
+        # ===== clear all boxes from the conveyor =====
+        if hasattr(self.conveyor, "_boxes"):
+            self.conveyor._boxes.clear()
+        if hasattr(self.conveyor, "_box_colors"):
+            self.conveyor._box_colors.clear()
+        self.conveyor.update()
 
         # reset borders and hide badges
         for slot, w in self._slot_to_widget.items():
@@ -243,7 +258,6 @@ class SortingTask(BaseTask):
         # return arm to home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
-        # clear any held-box visual on stop
         self.arm.held_box_visible = False
         self.arm.update()
 
@@ -253,9 +267,15 @@ class SortingTask(BaseTask):
                 self._highlight_bin(slot, False)
             self._selected_error = None
 
-        # ===== stop the worker logic =====
+        # ===== stop worker logic =====
         if self.worker and self.worker.isRunning():
             self.worker.stop()
+            self.worker = None   # fully drop it so we must re-create on start
+
+        # ===== reset metrics (optional) =====
+        if hasattr(self, "metrics_manager"):
+            self.metrics_manager.reset_metrics()
+
 
     # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> present -> return) ----------
     def _pose_home(self):
@@ -680,8 +700,13 @@ class SortingTask(BaseTask):
             # Update flashing/badges immediately so the bin shows this (oldest) error color
             self._apply_flash_colors()
 
-    def _on_metrics(self, metrics):
-        print("Final metrics:", metrics)
+    def _on_metrics_live(self, metrics):
+        """Receive live metrics from the worker and update MetricsManager in real time."""
+        if hasattr(self, "metrics_manager") and self.metrics_manager:
+            self.metrics_manager.update_metrics(metrics)
+        else:
+            # fallback for debugging
+            print("Live metrics:", metrics)
 
     def spawn_box_from_worker(self, box_data):
         """Called when worker wants to spawn a box."""

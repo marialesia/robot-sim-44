@@ -46,3 +46,18 @@ class MetricsManager(QWidget):
         self.errors_label.setText(f"Errors: {self.errors}")
         self.accuracy_label.setText(f"Accuracy: {self.accuracy:.1f}%")
         self.items_per_min_label.setText(f"Items/Min: {self.items_per_min}")
+
+    def reset_metrics(self):
+        self.total = 0
+        self.correct = 0
+        self.errors = 0
+        self.accuracy = 0.0
+        self.items_per_min = 0
+
+        self.total_label.setText("Total Sorted: 0")
+        self.correct_label.setText("Correct: 0")
+        self.errors_label.setText("Errors: 0")
+        self.accuracy_label.setText("Accuracy: 0.0%")
+        self.items_per_min_label.setText("Items/Min: 0")
+
+

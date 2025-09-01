@@ -8,6 +8,7 @@ class SortingWorker(QThread):
     box_spawned = pyqtSignal(dict)      # box color + error placeholder
     box_sorted = pyqtSignal(str, bool)  # (color, correct?)
     metrics_ready = pyqtSignal(dict)    # summary at end
+    metrics_live = pyqtSignal(dict)     # live updated metrics
 
     def __init__(self, pace, bin_count, error_rate=None, error_rate_percent=None):
         """
@@ -38,6 +39,8 @@ class SortingWorker(QThread):
         self.correct = 0
         self.errors = 0
 
+        self.total_elapsed = 0.0  # accumulate across pauses
+
         # store spawned boxes
         self.spawned_boxes = []
 
@@ -54,11 +57,11 @@ class SortingWorker(QThread):
     # ------------------------ thread loop ---------------------------
 
     def run(self):
-        start_time = time.time()
+        self.start_time = time.time()   # store start time
         while self.running:
             # spawn a random box
             color = random.choice(self.colors)
-            box_data = {"color": color, "error": False}  # error not determined yet
+            box_data = {"color": color, "error": False}
             self.spawned_boxes.append(box_data)
             self.box_spawned.emit(box_data)
 
@@ -67,13 +70,15 @@ class SortingWorker(QThread):
             delay = 1.0 / products_per_sec
             time.sleep(delay)
 
-        elapsed = time.time() - start_time
+        # final metrics
+        elapsed = time.time() - self.start_time
+        self.total_elapsed += elapsed
         self.metrics_ready.emit({
             "total": self.total,
             "correct": self.correct,
             "errors": self.errors,
             "accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "items_per_min": (self.total / elapsed) * 60 if elapsed > 0 else 0,
+            "items_per_min": (self.total / self.total_elapsed) * 60 if elapsed > 0 else 0,
             "spawn_rate_avg": (self.total / elapsed) if elapsed > 0 else 0,
             "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
         })
@@ -97,6 +102,16 @@ class SortingWorker(QThread):
             if b["color"] == box_color:
                 self.spawned_boxes.remove(b)
                 break
+        
+        # emit live metrics
+        self.metrics_live.emit({
+            "total": self.total,
+            "correct": self.correct,
+            "errors": self.errors,
+            "accuracy": (self.correct / self.total) * 100 if self.total else 0,
+            "items_per_min": (self.total / max(time.time() - getattr(self, 'start_time', time.time()), 1)) * 60,
+            "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
+        })
 
     # ------------------- internal normalization --------------------
 
