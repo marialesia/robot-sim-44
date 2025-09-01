@@ -1,8 +1,9 @@
 # tasks/packaging_task.py
 from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt, QTimer, QEvent
-from PyQt5.QtWidgets import QLabel
-from .base_task import BaseTask
+from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation
+from PyQt5.QtWidgets import QLabel, QGraphicsOpacityEffect, QHBoxLayout, QSizePolicy, QWidget
+from .base_task import BaseTask, StorageContainerWidget
+import random
 
 class PackagingTask(BaseTask):
     def __init__(self):
@@ -14,26 +15,63 @@ class PackagingTask(BaseTask):
         self.arm.c_arm = QColor("#8e44ad")
         self.arm.c_arm_dark = QColor("#6d2e8a")
 
-        # ---- Single packaging container styling ----
+        # ---- Single packaging container styling (this will be the LEFTMOST of the row) ----
         self.container.border = QColor("#c76a1a")
         self.container.fill_top = QColor("#ffe9d3")
         self.container.fill_bottom = QColor("#ffd9b5")
         self.container.rib = QColor(199, 106, 26, 110)
 
-        # ---- Layout: container left, arm centered (unchanged) ----
+        # ---- Layout: keep conveyor + arm the same; we'll replace the container with a row of 4 ----
         self.set_positions(
             conveyor=dict(row=0, col=0, colSpan=2, align=Qt.AlignTop),
-            arm=dict(row=0, col=0, colSpan=3, align=Qt.AlignHCenter | Qt.AlignBottom),
-            container=dict(row=1, col=0, align=Qt.AlignRight  | Qt.AlignBottom),
+            arm=dict(row=0, col=0, colSpan=2, align=Qt.AlignHCenter | Qt.AlignBottom),
+            # we temporarily place the single container, then immediately replace it with a row
+            container=dict(row=1, col=0, align=Qt.AlignRight | Qt.AlignBottom),
             col_stretch=[1, 1], row_stretch=[0, 1]
         )
+
+        # --- Build a compact row of 4 containers (primary + 3 more to its right) ---
+        self.grid.removeWidget(self.container)  # take it out to put into the row
+
+        # Create 3 additional containers (same style for now)
+        self.container_b = StorageContainerWidget()
+        self.container_c = StorageContainerWidget()
+        self.container_d = StorageContainerWidget()
+        for w in (self.container_b, self.container_c, self.container_d):
+            w.border = QColor("#c76a1a")
+            w.fill_top = QColor("#ffe9d3")
+            w.fill_bottom = QColor("#ffd9b5")
+            w.rib = QColor(199, 106, 26, 110)
+
+        # Make a tight row widget to hold all four
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(12)
+
+        for w in (self.container, self.container_b, self.container_c, self.container_d):
+            w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+            row_layout.addWidget(w)
+
+        # Add the row where the single container was; span across both columns to keep it near the arm
+        self.grid.addWidget(row, 1, 0, 1, 2, Qt.AlignRight | Qt.AlignBottom)
 
         # ===== Box spawner (orange) =====
         self._box_timer = QTimer(self)
         self._box_timer.timeout.connect(self._spawn_orange_box)
 
-        # ===== Simple packing counter (0/4) =====
-        self._pack_capacity = 4
+        # ===== Fade-out on full (applies to the PRIMARY container only) =====
+        self._fade_effect = QGraphicsOpacityEffect(self.container)
+        self.container.setGraphicsEffect(self._fade_effect)
+        self._fade_effect.setOpacity(1.0)
+
+        self._fade_anim = QPropertyAnimation(self._fade_effect, b"opacity", self)
+        self._fade_anim.setDuration(2000)  # 2s to fade to invisible
+        self._fade_anim.finished.connect(self.container.hide)
+        self._fade_started = False
+
+        # ===== Simple packing counter — label sits on the PRIMARY container =====
+        self._pack_capacity = 0
         self._pack_count = 0
         self._pack_label = QLabel(self.container)
         self._pack_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
@@ -46,7 +84,7 @@ class PackagingTask(BaseTask):
         self._pack_label.setText(f"{self._pack_count}/{self._pack_capacity}")
         self._pack_label.show()
 
-        # Keep label centered if the container resizes
+        # Keep label centered if the PRIMARY container resizes
         self.container.installEventFilter(self)
         self._position_pack_label()
 
@@ -73,6 +111,9 @@ class PackagingTask(BaseTask):
         self.arm.update()
         self.conveyor.update()
         self.container.update()
+        self.container_b.update()
+        self.container_c.update()
+        self.container_d.update()
 
     # ---------- Packing counter helpers ----------
     def _update_pack_label(self):
@@ -91,6 +132,15 @@ class PackagingTask(BaseTask):
             self._pack_count += 1
         self._update_pack_label()
 
+        # Start fade-out once when capacity is reached
+        if self._pack_count >= self._pack_capacity and not self._fade_started:
+            self._fade_started = True
+            self._fade_anim.stop()
+            self._fade_effect.setOpacity(1.0)
+            self._fade_anim.setStartValue(1.0)
+            self._fade_anim.setEndValue(0.0)
+            self._fade_anim.start()
+
     # ---------- Spawning ----------
     def _spawn_orange_box(self):
         # BaseTask.ConveyorBeltWidget handles strings like "orange"
@@ -98,15 +148,23 @@ class PackagingTask(BaseTask):
 
     # ---------- Lifecycle ----------
     def start(self):
+        # Pick a capacity for this run: 4, 5, or 6
+        self._pack_capacity = random.choice((4, 5, 6))
+
         # Belt motion
         self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
         if not self._box_timer.isActive():
             self._box_timer.start(1500)  # one orange box every 1.5s
 
-        # Reset packing counter at run start
+        # Reset packing counter and refresh the label to show "0/<capacity>"
         self._pack_count = 0
         self._update_pack_label()
+
+        # Make sure the container is visible at the start of each run
+        if hasattr(self, "_hide_timer") and self._hide_timer.isActive():
+            self._hide_timer.stop()
+        self.container.show()
 
         # Start arm FSM
         self._now_ms = 0
@@ -117,6 +175,7 @@ class PackagingTask(BaseTask):
             sh, el = self._pose_home()
             self._set_arm(sh, el)
             self._pick_timer.start()
+
 
     def stop(self):
         self.conveyor.enable_motion(False)
@@ -131,7 +190,7 @@ class PackagingTask(BaseTask):
         self.arm.held_box_visible = False
         self.arm.update()
 
-    # ---------- Arm poses (very close to sorting’s) ----------
+    # ---------- Arm poses ----------
     def _pose_home(self):
         return (-90.0, 0.0)
 
@@ -145,10 +204,7 @@ class PackagingTask(BaseTask):
         return (-93.0, -10.0)
 
     def _pose_present(self):
-        """
-        Quick 'present' toward the single packaging container.
-        You previously preferred pointing down-left; keep that pose.
-        """
+        """Present toward the row (still aimed at the primary/leftmost)."""
         return (-240.0, -12.0)
 
     # ---------- FSM plumbing ----------
@@ -214,7 +270,7 @@ class PackagingTask(BaseTask):
                 self._start_seg(self._pose_present(), 200)
 
             elif self._pick_state == "present":
-                # Count this as a packed item
+                # Count this as a packed item (into the PRIMARY container)
                 self._on_item_packed()
 
                 self._pick_state = "return"
@@ -231,7 +287,7 @@ class PackagingTask(BaseTask):
             elif self._pick_state == "idle_pause":
                 self._pick_state = "idle"
 
-    # ---------- Helpers (shared style with sorting) ----------
+    # ---------- Helpers ----------
     def _grip_x(self):
         """X-position where the gripper 'touches' boxes on the belt."""
         return self.conveyor.width() * 0.40
@@ -280,7 +336,7 @@ class PackagingTask(BaseTask):
                     return cols[i]
         return None
 
-    # ---------- Keep the counter label centered ----------
+    # ---------- Keep the counter label centered on the PRIMARY container ----------
     def eventFilter(self, obj, event):
         if obj is self.container and event.type() == QEvent.Resize:
             self._position_pack_label()
