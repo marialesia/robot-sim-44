@@ -83,6 +83,9 @@ class SortingWorker(QThread):
             "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
         })
 
+    def pause(self):
+        self.running = False
+
     def stop(self):
         self.running = False
 
