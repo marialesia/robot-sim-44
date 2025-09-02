@@ -46,24 +46,26 @@ class PackagingTask(BaseTask):
         self._row_layout.setSpacing(12)
 
         # Build container records list
-        # rec: {widget,label,capacity,count,effect,anim,fading,orig_border,error,badge}
+        # rec: {widget,label,capacity,count,effect,anim,fading,error,fixed,orig_border,badge}
         self._containers = []
 
-        # Flashing support (shared)
-        self._error_color = QColor("#d32f2f")  # material red-ish
-        self._flash_on = False
-        self._flash_timer = QTimer(self)
-        self._flash_timer.setInterval(350)
-        self._flash_timer.timeout.connect(self._flash_tick)
+        # Helper to create badge
+        def _make_badge(parent_w):
+            b = QLabel("!", parent_w)
+            b.setFixedSize(20, 20)
+            b.setAlignment(Qt.AlignCenter)
+            b.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            # default hidden; style set when shown
+            b.hide()
+            return b
 
-        # Helper to create a new container record (used for the initial 4)
+        # Helper to create a new container record
         def _new_container(widget=None):
             w = widget or StorageContainerWidget()
             _style_container(w)
             w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
-            # Pre-Start we want 0/0
-            cap = 0
+            cap = 0   # pre-start show 0/0
             cnt = 0
 
             # Counter label centered on the widget
@@ -78,6 +80,9 @@ class PackagingTask(BaseTask):
             lbl.setText(f"{cnt}/{cap}")
             lbl.show()
 
+            # Error badge (hidden until error)
+            badge = _make_badge(w)
+
             # Fade effect/animation (used when this container is the active one and reaches its trigger)
             eff = QGraphicsOpacityEffect(w)
             w.setGraphicsEffect(eff)
@@ -86,7 +91,7 @@ class PackagingTask(BaseTask):
             anim = QPropertyAnimation(eff, b"opacity", self)
             anim.setDuration(2000)  # 2s fade
 
-            # Recenter label on widget resizes
+            # Recenter label/badge on widget resizes & enable click handling
             w.installEventFilter(self)
 
             rec = {
@@ -97,11 +102,13 @@ class PackagingTask(BaseTask):
                 "effect": eff,
                 "anim": anim,
                 "fading": False,
-                "orig_border": QColor(w.border),
-                "error": False,
-                "badge": None,
+                "error": False,     # flagged by worker for under/over
+                "fixed": False,     # user clicked to correct
+                "orig_border": w.border,
+                "badge": badge
             }
-            self._create_badge(rec)   # red "!" badge (hidden initially)
+            # Initial badge position
+            self._position_badge(rec)
             return rec
 
         # Create 4 containers; use BaseTask's self.container as the first, others new
@@ -145,83 +152,93 @@ class PackagingTask(BaseTask):
         # Worker-driven fade flag (for current leftmost container)
         self._should_fade_current = False
 
+        # ===== Error flash timer (NEW) =====
+        self._flash_on = False
+        self._flash_timer = QTimer(self)
+        self._flash_timer.setInterval(350)  # flash speed
+        self._flash_timer.timeout.connect(self._on_flash_tick)
+
         # repaint once
         self.arm.update()
         self.conveyor.update()
         for rec in self._containers:
             rec["widget"].update()
             self._position_label(rec)
-            self._position_badge(rec)
 
-    # ---------- Badge & flashing helpers ----------
-    def _create_badge(self, rec):
-        w = rec["widget"]
-        lbl = QLabel("!", w)
-        lbl.setFixedSize(22, 22)
-        lbl.setAlignment(Qt.AlignCenter)
-        lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        lbl.setStyleSheet(
-            f"color: white;"
-            f"background: {self._error_color.name()};"
-            f"border: 2px solid {self._error_color.darker(130).name()};"
-            "border-radius: 11px; font-weight: 800; font-size: 14px;"
-        )
-        lbl.hide()
-        rec["badge"] = lbl
-
-    def _position_badge(self, rec):
-        w = rec["widget"]; b = rec.get("badge")
-        if not b:
-            return
-        x = (w.width() - b.width()) // 2
-        y = 2
-        b.move(max(0, x), max(0, y))
-
-    def _apply_error_visuals(self):
-        """Flash red border and show badge on containers with rec['error']==True."""
-        for rec in self._containers:
-            w = rec["widget"]
-            if rec.get("error") and w.isVisible():
-                # Flash border
-                w.border = self._error_color if self._flash_on else rec["orig_border"]
-                w.update()
-                # Show badge
-                if rec.get("badge"):
-                    rec["badge"].show()
-            else:
-                # Restore/Hide when not error
-                if w.border != rec["orig_border"]:
-                    w.border = rec["orig_border"]
-                    w.update()
-                if rec.get("badge"):
-                    rec["badge"].hide()
-
-    def _flash_tick(self):
-        self._flash_on = not self._flash_on
-        self._apply_error_visuals()
-
-    # ---------- Helpers for labels ----------
+    # ---------- Helpers for labels/badges ----------
     def _position_label(self, rec):
         w = rec["widget"]; lbl = rec["label"]
         x = (w.width() - lbl.width()) // 2
         y = (w.height() - lbl.height()) // 2
         lbl.move(max(0, x), max(0, y))
 
+    def _position_badge(self, rec):
+        w = rec["widget"]; b = rec.get("badge")
+        if not b:
+            return
+        x = (w.width() - b.width()) // 2
+        y = 2  # near top edge
+        b.move(max(0, x), max(0, y))
+
     def _update_label(self, rec):
         rec["label"].setText(f"{rec['count']}/{rec['capacity']}")
         self._position_label(rec)
+
+    # ---------- Error visuals ----------
+    def _apply_error_visuals(self):
+        """Flash red border + show badge for containers with error and not fixed."""
+        for rec in self._containers:
+            w = rec["widget"]
+            badge = rec.get("badge")
+            # Fixed takes precedence: show success green, no badge/flash
+            if rec.get("fixed"):
+                if badge:
+                    badge.hide()
+                w.border = QColor("#2ecc71")  # success green
+                w.update()
+                continue
+
+            if rec.get("error"):  # error: flash + badge
+                # flashing border red
+                w.border = QColor("#e74c3c") if self._flash_on else rec.get("orig_border", w.border)
+                w.update()
+
+                # badge styling and show
+                if badge:
+                    badge.setStyleSheet(
+                        "color: white;"
+                        "background: #e74c3c;"
+                        "border: 2px solid #b03a2e;"
+                        "border-radius: 10px;"
+                        "font-weight: 800; font-size: 12px;"
+                    )
+                    badge.show()
+                    self._position_badge(rec)
+            else:
+                # normal: restore border, hide badge
+                if badge:
+                    badge.hide()
+                w.border = rec.get("orig_border", w.border)
+                w.update()
+
+    def _on_flash_tick(self):
+        self._flash_on = not self._flash_on
+        self._apply_error_visuals()
 
     # ---------- Worker callbacks ----------
     def _on_worker_fade(self, mode, at_count, capacity, secs):
         """
         Worker says: the current leftmost container should fade NOW.
-        We also mark it as an error visual if mode is 'under' or 'over'.
+        We set a flag; fade actually begins on the next packed item (or immediately if already reached).
+        Also mark error (under/over) so visuals can reflect it.
         """
         self._should_fade_current = True
-        # mark error (and start flashing visuals) only for under/over
+
         if self._containers:
             rec = self._containers[0]
+            # Only under/over are errors
             rec["error"] = (mode in ("underfill", "overfill"))
+            rec["fixed"] = False
             self._apply_error_visuals()
 
     # ---------- Packing count ----------
@@ -281,7 +298,7 @@ class PackagingTask(BaseTask):
                 self._containers.append(new_rec)
                 self._row_layout.addWidget(new_rec["widget"])
 
-                # Ensure labels/badges are centered
+                # Ensure labels are centered
                 for rec2 in self._containers:
                     self._position_label(rec2)
                     self._position_badge(rec2)
@@ -291,8 +308,7 @@ class PackagingTask(BaseTask):
                     leftmost = self._containers[0]
                     self.worker.begin_container(leftmost["capacity"])
 
-                # After the leftmost is removed, visuals are naturally gone.
-                # Apply visuals on any remaining error containers (if any)
+                # After the shift, refresh visuals (in case next leftmost is in error later)
                 self._apply_error_visuals()
 
             # Ensure no duplicate connections on repeated fades
@@ -330,6 +346,13 @@ class PackagingTask(BaseTask):
         lbl.setText(f"{cnt}/{cap}")
         lbl.show()
 
+        # badge
+        badge = QLabel("!", w)
+        badge.setFixedSize(20, 20)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        badge.hide()
+
         eff = QGraphicsOpacityEffect(w)
         w.setGraphicsEffect(eff)
         eff.setOpacity(1.0)
@@ -347,11 +370,11 @@ class PackagingTask(BaseTask):
             "effect": eff,
             "anim": anim,
             "fading": False,
-            "orig_border": QColor(w.border),
             "error": False,
-            "badge": None,
+            "fixed": False,
+            "orig_border": w.border,
+            "badge": badge
         }
-        self._create_badge(rec)
         self._position_label(rec)
         self._position_badge(rec)
         return rec
@@ -380,7 +403,7 @@ class PackagingTask(BaseTask):
             self.worker = PackagingWorker(
                 pace="slow",
                 color="orange",
-                error_rate=0.80,  # 0.2 => about 2 in 10 containers under/over fill
+                error_rate=0.20,  # tweak as needed
             )
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.metrics_ready.connect(self._on_metrics)
@@ -392,16 +415,16 @@ class PackagingTask(BaseTask):
             rec["count"] = 0
             rec["capacity"] = PackagingWorker.pick_capacity()
             rec["error"] = False
-            self._update_label(rec)
+            rec["fixed"] = False
             rec["anim"].stop()
             rec["effect"].setOpacity(1.0)
             rec["widget"].show()
             rec["fading"] = False
-            # restore borders & hide badges
-            rec["widget"].border = rec["orig_border"]
-            if rec["badge"]:
+            # restore original border, hide badge, update label
+            rec["widget"].border = rec.get("orig_border", rec["widget"].border)
+            if rec.get("badge"):
                 rec["badge"].hide()
-            rec["widget"].update()
+            self._update_label(rec)
 
         # Tell worker the active container's capacity (leftmost)
         if self._containers:
@@ -409,10 +432,9 @@ class PackagingTask(BaseTask):
             self.worker.begin_container(leftmost["capacity"])
         self._should_fade_current = False
 
-        # Start flashing timer (does nothing visible until an error occurs)
+        # Start flash engine
         if not self._flash_timer.isActive():
             self._flash_timer.start()
-        self._apply_error_visuals()
 
         # Start arm FSM
         self._now_ms = 0
@@ -436,16 +458,9 @@ class PackagingTask(BaseTask):
             self.worker.stop()
             self.worker.wait(500)
 
-        # stop flashing + restore visuals
+        # stop flashing
         if self._flash_timer.isActive():
             self._flash_timer.stop()
-        for rec in self._containers:
-            rec["error"] = False
-            w = rec["widget"]
-            w.border = rec["orig_border"]
-            w.update()
-            if rec["badge"]:
-                rec["badge"].hide()
         self._flash_on = False
 
         # Return arm to home and clear held box
@@ -600,12 +615,55 @@ class PackagingTask(BaseTask):
                     return cols[i]
         return None
 
-    # ---------- Keep every counter label + badge centered on resize ----------
+    # ---------- Smart-fix ----------
+    def _smart_fix(self, rec):
+        """
+        If the clicked container is currently marked as error (under/over),
+        correct the count to capacity, turn border green, hide the badge/flash,
+        but do NOT stop/restart its fade animation.
+        """
+        if not rec.get("error"):
+            return  # nothing to fix
+
+        # Correct the number to exactly capacity (normalizing under/over)
+        cap = rec.get("capacity", 0)
+        if cap > 0:
+            rec["count"] = cap
+            self._update_label(rec)
+
+        # Clear the error state; keep fade untouched
+        rec["error"] = False
+        rec["fixed"] = True
+
+        # Visual: green border + hide badge
+        self._mark_fixed_visual(rec)
+        if rec.get("badge"):
+            rec["badge"].hide()
+
+        # Repaint (and stop flashing on it)
+        self._apply_error_visuals()
+
+    def _mark_fixed_visual(self, rec):
+        """Set a success-green border on the container to indicate the fix."""
+        w = rec["widget"]
+        w.border = QColor("#2ecc71")  # success green
+        w.update()
+
+    # ---------- Keep labels centered + handle clicks (smart-fix) ----------
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Resize:
+            # If a known container resized, re-center its label and badge
             for rec in self._containers:
                 if obj is rec["widget"]:
                     self._position_label(rec)
                     self._position_badge(rec)
                     break
+
+        # Smart-fix on click: fix under/over if user clicks the error container before it disappears
+        if event.type() == QEvent.MouseButtonPress:
+            for rec in self._containers:
+                if obj is rec["widget"]:
+                    self._smart_fix(rec)
+                    return True
+
         return super().eventFilter(obj, event)
