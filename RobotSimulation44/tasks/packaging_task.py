@@ -54,7 +54,7 @@ class PackagingTask(BaseTask):
             _style_container(w)
             w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
-            # capacity initally 0/0
+            # Pre-Start we want 0/0
             cap = 0
             cnt = 0
 
@@ -70,7 +70,7 @@ class PackagingTask(BaseTask):
             lbl.setText(f"{cnt}/{cap}")
             lbl.show()
 
-            # Fade effect/animation (used when this container is the active one and reaches capacity)
+            # Fade effect/animation (used when this container is the active one and reaches its trigger)
             eff = QGraphicsOpacityEffect(w)
             w.setGraphicsEffect(eff)
             eff.setOpacity(1.0)
@@ -105,7 +105,11 @@ class PackagingTask(BaseTask):
         # Put the row back into the grid — same placement style as before
         self.grid.addWidget(self._row, 1, 0, 1, 2, Qt.AlignRight | Qt.AlignBottom)
 
+        # ===== Spawner / worker =====
         self.worker = None
+        # Legacy timer kept for backward compatibility; we stop it once worker is used
+        self._box_timer = QTimer(self)
+        self._box_timer.timeout.connect(self._spawn_orange_box)
 
         # ===== Minimal arm “pick-present-return” cycle (like sorting) =====
         self._pick_timer = QTimer(self)
@@ -126,6 +130,9 @@ class PackagingTask(BaseTask):
         self._touch_cooldown_ms = 120
         self._despawn_offset_px = 0  # despawn box exactly when “touched”
 
+        # Worker-driven fade flag (for current leftmost container)
+        self._should_fade_current = False
+
         # repaint once
         self.arm.update()
         self.conveyor.update()
@@ -144,15 +151,15 @@ class PackagingTask(BaseTask):
         rec["label"].setText(f"{rec['count']}/{rec['capacity']}")
         self._position_label(rec)
 
-    # ---------- Capacity policy helper (delegates to logic if available) ----------
-    def _pick_capacity(self):
-        # Prefer PackagingWorker.pick_capacity() if it exists; else fallback
-        if hasattr(PackagingWorker, "pick_capacity"):
-            try:
-                return int(PackagingWorker.pick_capacity())
-            except Exception:
-                pass
-        return random.choice((4, 5, 6))
+    # ---------- Worker callbacks ----------
+    def _on_worker_fade(self, mode, at_count, capacity, secs):
+        """
+        Worker says: the current leftmost container should fade NOW.
+        We set a flag; fade actually begins on the next packed item (or immediately if already reached).
+        """
+        self._should_fade_current = True
+        # (Optional) debug print:
+        # print(f"Packaging: fade ({mode}) at {at_count}/{capacity} after {secs:.2f}s")
 
     # ---------- Packing count ----------
     def _on_item_packed(self):
@@ -165,20 +172,22 @@ class PackagingTask(BaseTask):
         if active["fading"]:
             return
 
-        if active["count"] < active["capacity"]:
-            active["count"] += 1
-            self._update_label(active)
+        # Increment count and show it (overfill will read e.g., 5/4)
+        active["count"] += 1
+        self._update_label(active)
 
-        # let logic track fill progress (emits container_filled when full)
-        if self.worker and hasattr(self.worker, "record_pack"):
-            try:
-                self.worker.record_pack()
-            except Exception:
-                pass
+        # Tell worker one more item got packed; it will decide if this container should fade (normal/under/over)
+        if self.worker:
+            self.worker.record_pack()
 
-        # Hit capacity -> start a one-time fade, then shift
-        if active["count"] >= active["capacity"] and not active["fading"]:
+        # Fade if worker flagged it (preferred), otherwise fallback to legacy (no worker) behavior
+        need_fade = self._should_fade_current
+        if not self.worker:
+            need_fade = need_fade or (active["count"] >= active["capacity"])
+
+        if need_fade and not active["fading"]:
             active["fading"] = True
+            self._should_fade_current = False
             eff = active["effect"]; anim = active["anim"]; w = active["widget"]
 
             anim.stop()
@@ -198,26 +207,40 @@ class PackagingTask(BaseTask):
                     pass
 
                 # Create and append a new container to the far-right
-                new_rec = self._create_new_container()
+                if self.worker and self.worker.isRunning():
+                    # Running: give the new container a real capacity now
+                    new_cap = PackagingWorker.pick_capacity()
+                    new_rec = self._create_new_container(initial_cap=new_cap)
+                else:
+                    # Not running: keep it 0/0 until Start
+                    new_rec = self._create_new_container(initial_cap=None)
+
                 self._containers.append(new_rec)
                 self._row_layout.addWidget(new_rec["widget"])
+
 
                 # Ensure labels are centered
                 for rec2 in self._containers:
                     self._position_label(rec2)
 
-                # New leftmost is active—let logic track it
-                if self.worker and hasattr(self.worker, "begin_container") and self._containers:
-                    try:
-                        self.worker.begin_container(self._containers[0]["capacity"])
-                    except Exception:
-                        pass
+                # IMPORTANT: inform the worker the active container changed
+                if self.worker and self._containers:
+                    leftmost = self._containers[0]
+                    self.worker.begin_container(leftmost["capacity"])
 
+            # Ensure no duplicate connections on repeated fades
+            try:
+                anim.finished.disconnect()
+            except Exception:
+                pass
             anim.finished.connect(_finished)
             anim.start()
 
-    def _create_new_container(self):
-        # Fresh container on the far-right with 0/N and full opacity
+    def _create_new_container(self, initial_cap=None):
+        """Create a fresh container on the far-right.
+        - Before the first Start: initial_cap=None -> show 0/0
+        - During a running session: pass a real capacity so it shows 0/N immediately
+        """
         w = StorageContainerWidget()
         # match styling to others
         w.border = QColor("#c76a1a")
@@ -226,7 +249,7 @@ class PackagingTask(BaseTask):
         w.rib = QColor(199, 106, 26, 110)
         w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
-        cap = self._pick_capacity()
+        cap = 0 if initial_cap is None else int(initial_cap)
         cnt = 0
 
         lbl = QLabel(w)
@@ -261,44 +284,53 @@ class PackagingTask(BaseTask):
         self._position_label(rec)
         return rec
 
+
+    # ---------- Spawning ----------
+    def _spawn_orange_box(self):
+        self.conveyor.spawn_box(color="orange")
+
+    # Called by worker
+    def spawn_box_from_worker(self, box_data):
+        color = box_data.get("color", "orange")
+        self.conveyor.spawn_box(color=color)
+
     # ---------- Lifecycle ----------
     def start(self):
         # Belt motion
         self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
 
-        # Start PackagingWorker spawner
+        # Ensure legacy timer is OFF
+        if self._box_timer.isActive():
+            self._box_timer.stop()
+
+        # Start/ensure worker
         if not self.worker or not self.worker.isRunning():
             self.worker = PackagingWorker(
-                pace="slow", color="orange", error_rate=0.0
+                pace="slow",
+                color="orange",
+                error_rate=0.20,  # <== tweak: 0.2 => about 2 in 10 containers under/over fill
             )
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.metrics_ready.connect(self._on_metrics)
-            # optional: listen for fill-time stats if logic provides it
-            if hasattr(self.worker, "container_filled"):
-                try:
-                    self.worker.container_filled.connect(self._on_container_filled)
-                except Exception:
-                    pass
+            self.worker.container_should_fade.connect(self._on_worker_fade)
             self.worker.start()
 
-        # Reset all containers (0/N, full opacity, not fading)
+        # Reset all containers (0/N, full opacity, not fading) and assign capacities
         for rec in self._containers:
             rec["count"] = 0
-            # randomize capacities at the start of a run to make each “cycle” fresh
-            rec["capacity"] = self._pick_capacity()
+            rec["capacity"] = PackagingWorker.pick_capacity()
             self._update_label(rec)
             rec["anim"].stop()
             rec["effect"].setOpacity(1.0)
             rec["widget"].show()
             rec["fading"] = False
 
-        # Let logic begin tracking the leftmost container's cycle (AFTER capacities are set)
-        if self.worker and hasattr(self.worker, "begin_container") and self._containers:
-            try:
-                self.worker.begin_container(self._containers[0]["capacity"])
-            except Exception:
-                pass
+        # Tell worker the active container's capacity (leftmost)
+        if self._containers:
+            leftmost = self._containers[0]
+            self.worker.begin_container(leftmost["capacity"])
+        self._should_fade_current = False
 
         # Start arm FSM
         self._now_ms = 0
@@ -312,6 +344,8 @@ class PackagingTask(BaseTask):
 
     def stop(self):
         self.conveyor.enable_motion(False)
+        if self._box_timer.isActive():
+            self._box_timer.stop()
         if self._pick_timer.isActive():
             self._pick_timer.stop()
 
@@ -325,6 +359,9 @@ class PackagingTask(BaseTask):
         self._set_arm(sh, el)
         self.arm.held_box_visible = False
         self.arm.update()
+
+    def _on_metrics(self, metrics):
+        print("Packaging metrics:", metrics)
 
     # ---------- Arm poses ----------
     def _pose_home(self):
@@ -424,21 +461,6 @@ class PackagingTask(BaseTask):
     def _grip_x(self):
         """X-position where the gripper 'touches' boxes on the belt."""
         return self.conveyor.width() * 0.40
-
-    def spawn_box_from_worker(self, box_data):  # NEW
-        # packaging_logic emits {"color": "orange", "error": bool}
-        color = box_data.get("color", "orange")
-        self.conveyor.spawn_box(color=color)
-
-    def _on_metrics(self, metrics):  # NEW (optional, just logs)
-        print("Packaging metrics:", metrics)
-
-    def _on_container_filled(self, capacity, seconds):
-        # Called if packaging_logic emits container_filled(capacity, seconds)
-        try:
-            print(f"Packaging: container {capacity}/{capacity} filled in {seconds:.2f}s")
-        except Exception:
-            print("Packaging: container filled")
 
     def _box_near_grip(self):
         boxes = getattr(self.conveyor, "_boxes", None)
