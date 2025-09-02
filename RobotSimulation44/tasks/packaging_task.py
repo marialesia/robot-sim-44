@@ -4,6 +4,7 @@ from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation
 from PyQt5.QtWidgets import QLabel, QGraphicsOpacityEffect, QHBoxLayout, QSizePolicy, QWidget
 from .base_task import BaseTask, StorageContainerWidget
 from .packaging_logic import PackagingWorker
+from event_logger import get_logger
 import random
 
 class PackagingTask(BaseTask):
@@ -130,7 +131,7 @@ class PackagingTask(BaseTask):
         self._box_timer = QTimer(self)
         self._box_timer.timeout.connect(self._spawn_orange_box)
 
-        # ===== Minimal arm “pick-present-return” cycle (like sorting) =====
+        # ===== Minimal arm 'pick-present-return' cycle =====
         self._pick_timer = QTimer(self)
         self._pick_timer.setInterval(16)  # ~60 FPS
         self._pick_timer.timeout.connect(self._tick_pick)
@@ -152,7 +153,7 @@ class PackagingTask(BaseTask):
         # Worker-driven fade flag (for current leftmost container)
         self._should_fade_current = False
 
-        # ===== Error flash timer (NEW) =====
+        # ===== Error flash timer =====
         self._flash_on = False
         self._flash_timer = QTimer(self)
         self._flash_timer.setInterval(350)  # flash speed
@@ -239,6 +240,14 @@ class PackagingTask(BaseTask):
             # Only under/over are errors
             rec["error"] = (mode in ("underfill", "overfill"))
             rec["fixed"] = False
+            # Log the trigger
+            try:
+                get_logger().log_robot(
+                    "Packaging",
+                    f"fade_trigger mode={mode} at {at_count}/{capacity} ({secs:.2f}s)"
+                )
+            except Exception:
+                pass
             self._apply_error_visuals()
 
     # ---------- Packing count ----------
@@ -255,6 +264,12 @@ class PackagingTask(BaseTask):
         # Increment count and show it (overfill will read e.g., 5/4)
         active["count"] += 1
         self._update_label(active)
+
+        # Log pack
+        try:
+            get_logger().log_robot("Packaging", f"pack {active['count']}/{active['capacity']}")
+        except Exception:
+            pass
 
         # Tell worker one more item got packed; it will decide if this container should fade (normal/under/over)
         if self.worker:
@@ -307,9 +322,26 @@ class PackagingTask(BaseTask):
                 if self.worker and self._containers:
                     leftmost = self._containers[0]
                     self.worker.begin_container(leftmost["capacity"])
+                    # Log begin of new active container
+                    try:
+                        get_logger().log_robot(
+                            "Packaging",
+                            f"begin_container capacity={leftmost['capacity']}"
+                        )
+                    except Exception:
+                        pass
 
                 # After the shift, refresh visuals (in case next leftmost is in error later)
                 self._apply_error_visuals()
+
+                # Log shift completion
+                try:
+                    get_logger().log_robot(
+                        "Packaging",
+                        f"shift_completed new_right_capacity={new_rec['capacity']}"
+                    )
+                except Exception:
+                    pass
 
             # Ensure no duplicate connections on repeated fades
             try:
@@ -386,6 +418,11 @@ class PackagingTask(BaseTask):
     # Called by worker
     def spawn_box_from_worker(self, box_data):
         color = box_data.get("color", "orange")
+        # Log spawn (robot event)
+        try:
+            get_logger().log_robot("Packaging", f"spawn_box color={color}")
+        except Exception:
+            pass
         self.conveyor.spawn_box(color=color)
 
     # ---------- Lifecycle ----------
@@ -430,6 +467,11 @@ class PackagingTask(BaseTask):
         if self._containers:
             leftmost = self._containers[0]
             self.worker.begin_container(leftmost["capacity"])
+            # Log active container begin
+            try:
+                get_logger().log_robot("Packaging", f"begin_container capacity={leftmost['capacity']}")
+            except Exception:
+                pass
         self._should_fade_current = False
 
         # Start flash engine
@@ -445,6 +487,12 @@ class PackagingTask(BaseTask):
             sh, el = self._pose_home()
             self._set_arm(sh, el)
             self._pick_timer.start()
+
+        # Log start control
+        try:
+            get_logger().log_user("Packaging", "control", "start", "pace=slow,error_rate=0.20")
+        except Exception:
+            pass
 
     def stop(self):
         self.conveyor.enable_motion(False)
@@ -469,7 +517,22 @@ class PackagingTask(BaseTask):
         self.arm.held_box_visible = False
         self.arm.update()
 
+        # Log stop control
+        try:
+            get_logger().log_user("Packaging", "control", "stop", "stopped by user")
+        except Exception:
+            pass
+
     def _on_metrics(self, metrics):
+        # CSV line for metrics
+        try:
+            get_logger().log_robot(
+                "Packaging",
+                f"metrics total={metrics.get('total')} errors={metrics.get('errors')} "
+                f"acc={metrics.get('accuracy'):.2f}% ipm={metrics.get('items_per_min'):.2f}"
+            )
+        except Exception:
+            pass
         print("Packaging metrics:", metrics)
 
     # ---------- Arm poses ----------
@@ -534,12 +597,12 @@ class PackagingTask(BaseTask):
                 self._start_seg(self._pose_pick(), 120)
 
             elif self._pick_state == "descend":
-                self._pick_state = "hold"
                 c = self._color_of_box_in_window()
                 if c is not None:
                     self.arm.held_box_color = c
-                self.arm.held_box_visible = True
-                self.arm.update()
+                    self.arm.held_box_visible = True
+                    self.arm.update()
+                self._pick_state = "hold"
                 self._start_seg(self._pose_pick(), 40)  # brief touch
 
             elif self._pick_state == "hold":
@@ -623,6 +686,11 @@ class PackagingTask(BaseTask):
         but do NOT stop/restart its fade animation.
         """
         if not rec.get("error"):
+            # Still log the click (no-op)
+            try:
+                get_logger().log_user("Packaging", "container", "click", "no error to fix")
+            except Exception:
+                pass
             return  # nothing to fix
 
         # Correct the number to exactly capacity (normalizing under/over)
@@ -639,6 +707,12 @@ class PackagingTask(BaseTask):
         self._mark_fixed_visual(rec)
         if rec.get("badge"):
             rec["badge"].hide()
+
+        # Log smart-fix
+        try:
+            get_logger().log_user("Packaging", "container", "smart_fix", f"set to {cap}/{cap}")
+        except Exception:
+            pass
 
         # Repaint (and stop flashing on it)
         self._apply_error_visuals()
