@@ -1,6 +1,6 @@
 # main_interface/observer_control.py
 from PyQt5.QtWidgets import QHBoxLayout, QCheckBox, QPushButton, QComboBox, QLabel
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal, QTimer, QTime 
 from event_logger import get_logger
 
 class ObserverControl(QObject):
@@ -87,6 +87,21 @@ class ObserverControl(QObject):
                                             "checked" if s else "unchecked")
         )
 
+        # TIMER
+        self.timer_label = QLabel("00:00")
+        self.control_bar.addWidget(self.timer_label)  
+
+        self.session_timer = QTimer()
+        self.session_timer.timeout.connect(self.update_timer)
+        self.start_time = None
+        self.elapsed_time = 0  # seconds elapsed before last stop
+        self.running = False
+
+        # Connect timer to buttons
+        self.start_button.clicked.connect(self.start_timer)
+        self.stop_button.clicked.connect(self.stop_timer)
+
+
         parent_layout.addLayout(self.control_bar)
 
     def update_tasks(self):
@@ -129,3 +144,29 @@ class ObserverControl(QObject):
             return {}
         else:
             return {}
+
+    # TIMER METHODS
+    def start_timer(self):
+        # Reset timer
+        self.elapsed_time = 0
+        self.start_time = QTime.currentTime()
+        self.session_timer.start(1000)  # update every second
+        self.running = True
+        self.timer_label.setText("00:00")  # reset display
+        # Log start
+        get_logger().log_user("ObserverControl", "Session Timer", "start", "Timer started")
+
+    def stop_timer(self):
+        if self.running:
+            # Pause and keep elapsed time 
+            self.elapsed_time += self.start_time.secsTo(QTime.currentTime())
+            self.session_timer.stop()
+            self.running = False
+            # Log stop
+            get_logger().log_user("ObserverControl", "Session Timer", "stop", "Timer paused")
+
+    def update_timer(self):
+        if self.start_time and self.running:
+            total_seconds = self.elapsed_time + self.start_time.secsTo(QTime.currentTime())
+            mins, secs = divmod(total_seconds, 60)
+            self.timer_label.setText(f"{mins:02}:{secs:02}")
