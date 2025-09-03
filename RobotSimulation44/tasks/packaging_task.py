@@ -426,7 +426,7 @@ class PackagingTask(BaseTask):
         self.conveyor.spawn_box(color=color)
 
     # ---------- Lifecycle ----------
-    def start(self):
+    def start(self, pace=None, error_rate=None):
         # Belt motion
         self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
@@ -438,9 +438,9 @@ class PackagingTask(BaseTask):
         # Start/ensure worker
         if not self.worker or not self.worker.isRunning():
             self.worker = PackagingWorker(
-                pace="slow",
+                pace=pace,
                 color="orange",
-                error_rate=0.20,  # tweak as needed
+                error_rate=error_rate,
             )
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.metrics_ready.connect(self._on_metrics)

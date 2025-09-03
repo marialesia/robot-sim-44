@@ -1,5 +1,6 @@
 # main_interface/unified_interface.py
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel
+from PyQt5.QtCore import Qt
 from .task_manager import TaskManager
 from .observer_control import ObserverControl
 from .layout_controller import LayoutController
@@ -38,14 +39,15 @@ class ObserverSystemWindow(QMainWindow):
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         self.main_layout = QVBoxLayout(main_widget)
+        self.main_layout.setAlignment(Qt.AlignTop)  # <- top-align everything
 
-        # Observer controls
+        # Observer controls (top)
         self.observer_control = ObserverControl(self.main_layout)
 
-        # Metrics manager (bottom)
+        # Metrics manager (immediately below)
         self.metrics_manager = MetricsManager()
         self.main_layout.addWidget(self.metrics_manager)
 
-        # Pass the metrics manager down to task manager so all tasks can use it
+        # Pass the metrics manager down to task manager
         if hasattr(self.task_manager, "set_metrics_manager"):
             self.task_manager.set_metrics_manager(self.metrics_manager)
