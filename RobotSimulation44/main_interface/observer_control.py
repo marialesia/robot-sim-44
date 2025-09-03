@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QCheckBox, QPushButton,
     QComboBox, QLabel, QGroupBox, QFileDialog, QLineEdit
 )
-from PyQt5.QtCore import QObject, pyqtSignal, Qt
+from PyQt5.QtCore import QObject, pyqtSignal, Qt, QTimer, QTime 
 from event_logger import get_logger
 import json
 
@@ -43,6 +43,20 @@ class ObserverControl(QObject):
         button_row.addWidget(self.save_button)
         button_row.addWidget(self.load_button)
         self.control_bar.addLayout(button_row)
+
+        # TIMER
+        self.timer_label = QLabel("00:00")
+        button_row.addWidget(self.timer_label)  
+
+        self.session_timer = QTimer()
+        self.session_timer.timeout.connect(self.update_timer)
+        self.start_time = None
+        self.elapsed_time = 0  # seconds elapsed before last stop
+        self.running = False
+
+        # Connect timer to buttons
+        self.start_button.clicked.connect(self.start_timer)
+        self.stop_button.clicked.connect(self.stop_timer)
 
         # --- Row 2: Task groups side by side ---
         tasks_row = QHBoxLayout()
@@ -181,6 +195,7 @@ class ObserverControl(QObject):
         return int(self.sort_bin_dropdown.currentText())
 
     def get_sort_error_rate(self):
+        # strip '%' and convert to decimal fraction
         value = self.sort_error_dropdown.currentText()
         if value.endswith("%"):
             return int(value[:-1]) / 100.0
@@ -190,6 +205,7 @@ class ObserverControl(QObject):
         return self.pack_pace_dropdown.currentText()
 
     def get_pack_error_rate(self):
+        # strip '%' and convert to decimal fraction
         value = self.pack_error_dropdown.currentText()
         if value.endswith("%"):
             return int(value[:-1]) / 100.0
@@ -199,12 +215,14 @@ class ObserverControl(QObject):
         return self.insp_pace_dropdown.currentText()
 
     def get_insp_error_rate(self):
+        # strip '%' and convert to decimal fraction
         value = self.insp_error_dropdown.currentText()
         if value.endswith("%"):
             return int(value[:-1]) / 100.0
         return 0.0
 
     def get_params_for_task(self, task_name):
+        """Return a dict of parameters for a given task name."""
         task_name = task_name.lower()
         if task_name == "sorting":
             return {
@@ -213,17 +231,45 @@ class ObserverControl(QObject):
                 "error_rate": self.get_sort_error_rate(),
             }
         elif task_name == "packaging":
+            # return packaging-specific params
             return {
                 "pace": self.get_pack_pace(),
                 "error_rate": self.get_pack_error_rate(),
             }
         elif task_name == "inspection":
+            # return inspection-specific params
             return {
                 "pace": self.get_insp_pace(),
                 "error_rate": self.get_insp_error_rate(),
             }
         else:
             return {}
+
+    # TIMER METHODS
+    def start_timer(self):
+        # Reset timer
+        self.elapsed_time = 0
+        self.start_time = QTime.currentTime()
+        self.session_timer.start(1000)  # update every second
+        self.running = True
+        self.timer_label.setText("00:00")  # reset display
+        # Log start
+        get_logger().log_user("ObserverControl", "Session Timer", "start", "Timer started")
+
+    def stop_timer(self):
+        if self.running:
+            # Pause and keep elapsed time 
+            self.elapsed_time += self.start_time.secsTo(QTime.currentTime())
+            self.session_timer.stop()
+            self.running = False
+            # Log stop
+            get_logger().log_user("ObserverControl", "Session Timer", "stop", "Timer paused")
+
+    def update_timer(self):
+        if self.start_time and self.running:
+            total_seconds = self.elapsed_time + self.start_time.secsTo(QTime.currentTime())
+            mins, secs = divmod(total_seconds, 60)
+            self.timer_label.setText(f"{mins:02}:{secs:02}")
 
     # --- SAVE / LOAD FUNCTIONS ---
     def save_parameters(self):
