@@ -32,9 +32,9 @@ class PackagingWorker(QThread):
 
         # Items per second ranges
         self.pace_map = {
-            "slow":   (0.3, 0.6),
-            "medium": (0.7, 1.2),
-            "fast":   (1.3, 2.0),
+            "slow": (0.1, 0.3),
+            "medium": (0.3, 0.7),
+            "fast": (0.7, 1.0)
         }
 
         # Spawner metrics

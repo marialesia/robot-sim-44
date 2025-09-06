@@ -129,9 +129,9 @@ class InspectionTask(BaseTask):
         self.worker = None
 
     # ===== Controls =====
-    def start(self, pace="slow", error_rate=None, error_rate_percent=None):
+    def start(self, pace=None, error_rate=None, error_rate_percent=None):
         # belt motion
-        self.conveyor.setBeltSpeed(60)
+        self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
 
         # reset state
