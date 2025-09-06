@@ -1,7 +1,7 @@
 # main_interface/observer_control.py
 from PyQt5.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QCheckBox, QPushButton,
-    QComboBox, QLabel, QGroupBox, QFileDialog, QLineEdit
+    QComboBox, QLabel, QGroupBox, QFileDialog, QLineEdit, QSlider
 )
 from PyQt5.QtCore import QObject, pyqtSignal, Qt, QTimer, QTime 
 from event_logger import get_logger
@@ -62,6 +62,32 @@ class ObserverControl(QObject):
         tasks_row = QHBoxLayout()
         tasks_row.setAlignment(Qt.AlignTop)
 
+        # --- Helper function to create slider + editable input for error rate ---
+        def create_slider_with_input():
+            container = QHBoxLayout()
+            slider = QSlider(Qt.Horizontal)
+            slider.setRange(0, 100)
+            slider.setValue(0)
+            slider.setTickInterval(5)
+            slider.setTickPosition(QSlider.TicksBelow)
+            input_field = QLineEdit("0")
+            input_field.setFixedWidth(50)
+            container.addWidget(slider)
+            container.addWidget(input_field)
+
+            # Connect slider -> input_field
+            slider.valueChanged.connect(lambda val: input_field.setText(str(val)))
+            # Connect input_field -> slider
+            def text_changed():
+                try:
+                    val = int(input_field.text())
+                    if 0 <= val <= 100:
+                        slider.setValue(val)
+                except ValueError:
+                    pass
+            input_field.editingFinished.connect(text_changed)
+            return slider, input_field, container
+
         # Sorting group
         sorting_group = QGroupBox("Sorting")
         sorting_layout = QVBoxLayout()
@@ -81,9 +107,8 @@ class ObserverControl(QObject):
         sorting_layout.addWidget(self.sort_bin_dropdown)
 
         sorting_layout.addWidget(QLabel("Error Rate:"))
-        self.sort_error_dropdown = QComboBox()
-        self.sort_error_dropdown.addItems(["0%", "5%", "10%", "20%"])
-        sorting_layout.addWidget(self.sort_error_dropdown)
+        self.sort_error_slider, self.sort_error_input, slider_layout = create_slider_with_input()
+        sorting_layout.addLayout(slider_layout)
 
         sorting_group.setLayout(sorting_layout)
         tasks_row.addWidget(sorting_group)
@@ -107,9 +132,8 @@ class ObserverControl(QObject):
         # packaging_layout.addWidget(self.pack_bin_dropdown)
 
         packaging_layout.addWidget(QLabel("Error Rate:"))
-        self.pack_error_dropdown = QComboBox()
-        self.pack_error_dropdown.addItems(["0%", "5%", "10%", "20%"])
-        packaging_layout.addWidget(self.pack_error_dropdown)
+        self.pack_error_slider, self.pack_error_input, slider_layout = create_slider_with_input()
+        packaging_layout.addLayout(slider_layout)
 
         packaging_group.setLayout(packaging_layout)
         tasks_row.addWidget(packaging_group)
@@ -133,9 +157,8 @@ class ObserverControl(QObject):
         # inspection_layout.addWidget(self.insp_bin_dropdown)
 
         inspection_layout.addWidget(QLabel("Error Rate:"))
-        self.insp_error_dropdown = QComboBox()
-        self.insp_error_dropdown.addItems(["0%", "5%", "10%", "20%"])
-        inspection_layout.addWidget(self.insp_error_dropdown)
+        self.insp_error_slider, self.insp_error_input, slider_layout = create_slider_with_input()
+        inspection_layout.addLayout(slider_layout)
 
         inspection_group.setLayout(inspection_layout)
         tasks_row.addWidget(inspection_group)
@@ -143,15 +166,17 @@ class ObserverControl(QObject):
         self.control_bar.addLayout(tasks_row)
         parent_layout.addLayout(self.control_bar)
 
-        # === Connections ===
+        # === Connections for checkboxes and task updates ===
         self.sorting_checkbox.stateChanged.connect(self.update_tasks)
         self.packaging_checkbox.stateChanged.connect(self.update_tasks)
         self.inspection_checkbox.stateChanged.connect(self.update_tasks)
 
+        # === Connections for start/pause/stop buttons ===
         self.start_button.clicked.connect(lambda: self.start_pressed.emit())
         self.pause_button.clicked.connect(lambda: self.pause_pressed.emit())
         self.stop_button.clicked.connect(lambda: self.stop_pressed.emit())
 
+        # === Connections for save/load buttons ===
         self.save_button.clicked.connect(self.save_parameters)
         self.load_button.clicked.connect(self.load_parameters)
 
@@ -178,6 +203,7 @@ class ObserverControl(QObject):
                                             "checked" if s else "unchecked")
         )
 
+    # --- Task getter functions ---
     def update_tasks(self):
         active_tasks = []
         if self.sorting_checkbox.isChecked():
@@ -195,31 +221,19 @@ class ObserverControl(QObject):
         return int(self.sort_bin_dropdown.currentText())
 
     def get_sort_error_rate(self):
-        # strip '%' and convert to decimal fraction
-        value = self.sort_error_dropdown.currentText()
-        if value.endswith("%"):
-            return int(value[:-1]) / 100.0
-        return 0.0
+        return self.sort_error_slider.value() / 100.0
 
     def get_pack_pace(self):
         return self.pack_pace_dropdown.currentText()
 
     def get_pack_error_rate(self):
-        # strip '%' and convert to decimal fraction
-        value = self.pack_error_dropdown.currentText()
-        if value.endswith("%"):
-            return int(value[:-1]) / 100.0
-        return 0.0
+        return self.pack_error_slider.value() / 100.0
 
     def get_insp_pace(self):
         return self.insp_pace_dropdown.currentText()
 
     def get_insp_error_rate(self):
-        # strip '%' and convert to decimal fraction
-        value = self.insp_error_dropdown.currentText()
-        if value.endswith("%"):
-            return int(value[:-1]) / 100.0
-        return 0.0
+        return self.insp_error_slider.value() / 100.0
 
     def get_params_for_task(self, task_name):
         """Return a dict of parameters for a given task name."""
@@ -245,7 +259,7 @@ class ObserverControl(QObject):
         else:
             return {}
 
-    # TIMER METHODS
+    # --- TIMER METHODS ---
     def start_timer(self):
         # Reset timer
         self.elapsed_time = 0
@@ -282,17 +296,17 @@ class ObserverControl(QObject):
                 "enabled": self.sorting_checkbox.isChecked(),
                 "pace": self.sort_pace_dropdown.currentText(),
                 "bin_count": self.sort_bin_dropdown.currentText(),
-                "error_rate": self.sort_error_dropdown.currentText(),
+                "error_rate": self.sort_error_slider.value(),
             },
             "packaging": {
                 "enabled": self.packaging_checkbox.isChecked(),
                 "pace": self.pack_pace_dropdown.currentText(),
-                "error_rate": self.pack_error_dropdown.currentText(),
+                "error_rate": self.pack_error_slider.value(),
             },
             "inspection": {
                 "enabled": self.inspection_checkbox.isChecked(),
                 "pace": self.insp_pace_dropdown.currentText(),
-                "error_rate": self.insp_error_dropdown.currentText(),
+                "error_rate": self.insp_error_slider.value(),
             }
         }
 
@@ -328,21 +342,21 @@ class ObserverControl(QObject):
             self.sorting_checkbox.setChecked(s.get("enabled", False))
             self.sort_pace_dropdown.setCurrentText(s.get("pace", "medium"))
             self.sort_bin_dropdown.setCurrentText(s.get("bin_count", "2"))
-            self.sort_error_dropdown.setCurrentText(s.get("error_rate", "0%"))
+            self.sort_error_slider.setValue(s.get("error_rate", 0))
 
         # --- Packaging ---
         if "packaging" in params:
             p = params["packaging"]
             self.packaging_checkbox.setChecked(p.get("enabled", False))
             self.pack_pace_dropdown.setCurrentText(p.get("pace", "medium"))
-            self.pack_error_dropdown.setCurrentText(p.get("error_rate", "0%"))
+            self.pack_error_slider.setValue(p.get("error_rate", 0))
 
         # --- Inspection ---
         if "inspection" in params:
             i = params["inspection"]
             self.inspection_checkbox.setChecked(i.get("enabled", False))
             self.insp_pace_dropdown.setCurrentText(i.get("pace", "medium"))
-            self.insp_error_dropdown.setCurrentText(i.get("error_rate", "0%"))
+            self.insp_error_slider.setValue(i.get("error_rate", 0))
 
         # Trigger task update
         self.update_tasks()
