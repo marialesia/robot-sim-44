@@ -13,43 +13,57 @@ class MetricsManager(QWidget):
         sorting_box = QGroupBox("Sorting Metrics")
         sorting_layout = QVBoxLayout()
 
-        self.total_label = QLabel("Total Sorted: 0")
-        self.correct_label = QLabel("Correct: 0")
-        self.errors_label = QLabel("Errors: 0")
-        self.accuracy_label = QLabel("Accuracy: 0.0%")
-        self.items_per_min_label = QLabel("Items/Min: 0")
+        self.sort_total_label = QLabel("Total Sorted: 0")
+        self.sort_accuracy_label = QLabel("Accuracy: 0.0%")
+        self.sort_efficiency_label = QLabel("Efficiency: 0.0%")
+        self.sort_throughput_label = QLabel("Throughput: 0")
+        self.sort_errors_label = QLabel("Errors: 0")
+        self.sort_error_rate_label = QLabel("Error Rate: 0.0%")
+        self.sort_items_per_min_label = QLabel("Items/Min: 0")
 
-        sorting_layout.addWidget(self.total_label)
-        sorting_layout.addWidget(self.correct_label)
-        sorting_layout.addWidget(self.errors_label)
-        sorting_layout.addWidget(self.accuracy_label)
-        sorting_layout.addWidget(self.items_per_min_label)
+        for lbl in [self.sort_total_label, self.sort_accuracy_label, self.sort_efficiency_label,
+                    self.sort_throughput_label, self.sort_errors_label,
+                    self.sort_error_rate_label, self.sort_items_per_min_label]:
+            sorting_layout.addWidget(lbl)
+
         sorting_box.setLayout(sorting_layout)
 
         # --- Packaging Metrics ---
         packaging_box = QGroupBox("Packaging Metrics")
         packaging_layout = QVBoxLayout()
 
-        self.packing_efficiency_label = QLabel("Packing Efficiency: 0.0%")
-        self.packaging_throughput_label = QLabel("Throughput: 0")
-        self.packaging_error_rate_label = QLabel("Error Rate: 0.0%")
+        self.pack_total_label = QLabel("Total Packed: 0")
+        self.pack_accuracy_label = QLabel("Accuracy: 0.0%")
+        self.pack_efficiency_label = QLabel("Efficiency: 0.0%")
+        self.pack_throughput_label = QLabel("Throughput: 0")
+        self.pack_errors_label = QLabel("Errors: 0")
+        self.pack_error_rate_label = QLabel("Error Rate: 0.0%")
+        self.pack_items_per_min_label = QLabel("Items/Min: 0")
 
-        packaging_layout.addWidget(self.packing_efficiency_label)
-        packaging_layout.addWidget(self.packaging_throughput_label)
-        packaging_layout.addWidget(self.packaging_error_rate_label)
+        for lbl in [self.pack_total_label, self.pack_accuracy_label, self.pack_efficiency_label,
+                    self.pack_throughput_label, self.pack_errors_label,
+                    self.pack_error_rate_label, self.pack_items_per_min_label]:
+            packaging_layout.addWidget(lbl)
+
         packaging_box.setLayout(packaging_layout)
 
         # --- Inspection Metrics ---
         inspection_box = QGroupBox("Inspection Metrics")
         inspection_layout = QVBoxLayout()
 
-        self.inspection_accuracy_label = QLabel("Accuracy: 0.0%")
-        self.defects_missed_label = QLabel("Defects Missed: 0")
-        self.inspection_throughput_label = QLabel("Throughput: 0")
+        self.insp_total_label = QLabel("Total Inspected: 0")
+        self.insp_accuracy_label = QLabel("Accuracy: 0.0%")
+        self.insp_efficiency_label = QLabel("Efficiency: 0.0%")
+        self.insp_throughput_label = QLabel("Throughput: 0")
+        self.insp_defects_missed_label = QLabel("Defects Missed: 0")
+        self.insp_error_rate_label = QLabel("Error Rate: 0.0%")
+        self.insp_items_per_min_label = QLabel("Items/Min: 0")
 
-        inspection_layout.addWidget(self.inspection_accuracy_label)
-        inspection_layout.addWidget(self.defects_missed_label)
-        inspection_layout.addWidget(self.inspection_throughput_label)
+        for lbl in [self.insp_total_label, self.insp_accuracy_label, self.insp_efficiency_label,
+                    self.insp_throughput_label, self.insp_defects_missed_label,
+                    self.insp_error_rate_label, self.insp_items_per_min_label]:
+            inspection_layout.addWidget(lbl)
+
         inspection_box.setLayout(inspection_layout)
 
         # Add all groups to main layout
@@ -59,84 +73,137 @@ class MetricsManager(QWidget):
 
         self.setLayout(main_layout)
 
-        # Internal placeholders
-        self.total = 0
-        self.correct = 0
-        self.errors = 0
-        self.accuracy = 0.0
-        self.items_per_min = 0
+        # --- Internal placeholders ---
+        # Sorting
+        self.sort_total = 0
+        self.sort_accuracy = 0.0
+        self.sort_efficiency = 0.0
+        self.sort_throughput = 0
+        self.sort_errors = 0
+        self.sort_error_rate = 0.0
+        self.sort_items_per_min = 0
 
-        self.packing_efficiency = 0.0
-        self.packaging_throughput = 0
-        self.packaging_error_rate = 0.0
+        # Packaging
+        self.pack_total = 0
+        self.pack_accuracy = 0.0
+        self.pack_efficiency = 0.0
+        self.pack_throughput = 0
+        self.pack_errors = 0
+        self.pack_error_rate = 0.0
+        self.pack_items_per_min = 0
 
-        self.inspection_accuracy = 0.0
-        self.defects_missed = 0
-        self.inspection_throughput = 0
+        # Inspection
+        self.insp_total = 0
+        self.insp_accuracy = 0.0
+        self.insp_efficiency = 0.0
+        self.insp_throughput = 0
+        self.insp_defects_missed = 0
+        self.insp_error_rate = 0.0
+        self.insp_items_per_min = 0
 
     def update_metrics(self, metrics: dict):
         """Update labels with values from a dict of metrics"""
 
         # Sorting
-        self.total = metrics.get("total", self.total)
-        self.correct = metrics.get("correct", self.correct)
-        self.errors = metrics.get("errors", self.errors)
-        self.accuracy = metrics.get("accuracy", self.accuracy)
-        self.items_per_min = metrics.get("items_per_min", self.items_per_min)
+        self.sort_total = metrics.get("sort_total", self.sort_total)
+        self.sort_accuracy = metrics.get("sort_accuracy", self.sort_accuracy)
+        self.sort_efficiency = metrics.get("sort_efficiency", self.sort_efficiency)
+        self.sort_throughput = metrics.get("sort_throughput", self.sort_throughput)
+        self.sort_errors = metrics.get("sort_errors", self.sort_errors)
+        self.sort_error_rate = metrics.get("sort_error_rate", self.sort_error_rate)
+        self.sort_items_per_min = metrics.get("sort_items_per_min", self.sort_items_per_min)
 
-        # Refresh text
-        self.total_label.setText(f"Total Sorted: {self.total}")
-        self.correct_label.setText(f"Correct: {self.correct}")
-        self.errors_label.setText(f"Errors: {self.errors}")
-        self.accuracy_label.setText(f"Accuracy: {self.accuracy:.1f}%")
-        self.items_per_min_label.setText(f"Items/Min: {self.items_per_min}")
+        self.sort_total_label.setText(f"Total Sorted: {self.sort_total}")
+        self.sort_accuracy_label.setText(f"Accuracy: {self.sort_accuracy:.1f}%")
+        self.sort_efficiency_label.setText(f"Efficiency: {self.sort_efficiency:.1f}%")
+        self.sort_throughput_label.setText(f"Throughput: {self.sort_throughput}")
+        self.sort_errors_label.setText(f"Errors: {self.sort_errors}")
+        self.sort_error_rate_label.setText(f"Error Rate: {self.sort_error_rate:.1f}%")
+        self.sort_items_per_min_label.setText(f"Items/Min: {self.sort_items_per_min}")
 
         # Packaging
-        self.packing_efficiency = metrics.get("packing_efficiency", self.packing_efficiency)
-        self.packaging_throughput = metrics.get("packaging_throughput", self.packaging_throughput)
-        self.packaging_error_rate = metrics.get("packaging_error_rate", self.packaging_error_rate)
+        self.pack_total = metrics.get("pack_total", self.pack_total)
+        self.pack_accuracy = metrics.get("pack_accuracy", self.pack_accuracy)
+        self.pack_efficiency = metrics.get("pack_efficiency", self.pack_efficiency)
+        self.pack_throughput = metrics.get("pack_throughput", self.pack_throughput)
+        self.pack_errors = metrics.get("pack_errors", self.pack_errors)
+        self.pack_error_rate = metrics.get("pack_error_rate", self.pack_error_rate)
+        self.pack_items_per_min = metrics.get("pack_items_per_min", self.pack_items_per_min)
 
-        self.packing_efficiency_label.setText(f"Packing Efficiency: {self.packing_efficiency:.1f}%")
-        self.packaging_throughput_label.setText(f"Throughput: {self.packaging_throughput}")
-        self.packaging_error_rate_label.setText(f"Error Rate: {self.packaging_error_rate:.1f}%")
+        self.pack_total_label.setText(f"Total Packed: {self.pack_total}")
+        self.pack_accuracy_label.setText(f"Accuracy: {self.pack_accuracy:.1f}%")
+        self.pack_efficiency_label.setText(f"Efficiency: {self.pack_efficiency:.1f}%")
+        self.pack_throughput_label.setText(f"Throughput: {self.pack_throughput}")
+        self.pack_errors_label.setText(f"Errors: {self.pack_errors}")
+        self.pack_error_rate_label.setText(f"Error Rate: {self.pack_error_rate:.1f}%")
+        self.pack_items_per_min_label.setText(f"Items/Min: {self.pack_items_per_min}")
 
         # Inspection
-        self.inspection_accuracy = metrics.get("inspection_accuracy", self.inspection_accuracy)
-        self.defects_missed = metrics.get("defects_missed", self.defects_missed)
-        self.inspection_throughput = metrics.get("inspection_throughput", self.inspection_throughput)
+        self.insp_total = metrics.get("insp_total", self.insp_total)
+        self.insp_accuracy = metrics.get("insp_accuracy", self.insp_accuracy)
+        self.insp_efficiency = metrics.get("insp_efficiency", self.insp_efficiency)
+        self.insp_throughput = metrics.get("insp_throughput", self.insp_throughput)
+        self.insp_defects_missed = metrics.get("insp_defects_missed", self.insp_defects_missed)
+        self.insp_error_rate = metrics.get("insp_error_rate", self.insp_error_rate)
+        self.insp_items_per_min = metrics.get("insp_items_per_min", self.insp_items_per_min)
 
-        self.inspection_accuracy_label.setText(f"Accuracy: {self.inspection_accuracy:.1f}%")
-        self.defects_missed_label.setText(f"Defects Missed: {self.defects_missed}")
-        self.inspection_throughput_label.setText(f"Throughput: {self.inspection_throughput}")
+        self.insp_total_label.setText(f"Total Inspected: {self.insp_total}")
+        self.insp_accuracy_label.setText(f"Accuracy: {self.insp_accuracy:.1f}%")
+        self.insp_efficiency_label.setText(f"Efficiency: {self.insp_efficiency:.1f}%")
+        self.insp_throughput_label.setText(f"Throughput: {self.insp_throughput}")
+        self.insp_defects_missed_label.setText(f"Defects Missed: {self.insp_defects_missed}")
+        self.insp_error_rate_label.setText(f"Error Rate: {self.insp_error_rate:.1f}%")
+        self.insp_items_per_min_label.setText(f"Items/Min: {self.insp_items_per_min}")
 
     def reset_metrics(self):
-        # Reset sorting
-        self.total = 0
-        self.correct = 0
-        self.errors = 0
-        self.accuracy = 0.0
-        self.items_per_min = 0
+        """Reset all metrics to zero and update labels"""
+        # Sorting
+        self.sort_total = 0
+        self.sort_accuracy = 0.0
+        self.sort_efficiency = 0.0
+        self.sort_throughput = 0
+        self.sort_errors = 0
+        self.sort_error_rate = 0.0
+        self.sort_items_per_min = 0
 
-        self.total_label.setText("Total Sorted: 0")
-        self.correct_label.setText("Correct: 0")
-        self.errors_label.setText("Errors: 0")
-        self.accuracy_label.setText("Accuracy: 0.0%")
-        self.items_per_min_label.setText("Items/Min: 0")
+        self.sort_total_label.setText("Total Sorted: 0")
+        self.sort_accuracy_label.setText("Accuracy: 0.0%")
+        self.sort_efficiency_label.setText("Efficiency: 0.0%")
+        self.sort_throughput_label.setText("Throughput: 0")
+        self.sort_errors_label.setText("Errors: 0")
+        self.sort_error_rate_label.setText("Error Rate: 0.0%")
+        self.sort_items_per_min_label.setText("Items/Min: 0")
 
-        # Reset packaging
-        self.packing_efficiency = 0.0
-        self.packaging_error_rate = 0.0
-        self.packaging_throughput = 0
+        # Packaging
+        self.pack_total = 0
+        self.pack_accuracy = 0.0
+        self.pack_efficiency = 0.0
+        self.pack_throughput = 0
+        self.pack_errors = 0
+        self.pack_error_rate = 0.0
+        self.pack_items_per_min = 0
 
-        self.packing_efficiency_label.setText("Packing Efficiency: 0.0%")
-        self.packaging_throughput_label.setText("Throughput: 0")
-        self.packaging_error_rate_label.setText("Error Rate: 0.0%")
+        self.pack_total_label.setText("Total Packed: 0")
+        self.pack_accuracy_label.setText("Accuracy: 0.0%")
+        self.pack_efficiency_label.setText("Efficiency: 0.0%")
+        self.pack_throughput_label.setText("Throughput: 0")
+        self.pack_errors_label.setText("Errors: 0")
+        self.pack_error_rate_label.setText("Error Rate: 0.0%")
+        self.pack_items_per_min_label.setText("Items/Min: 0")
 
-        # Reset inspection
-        self.inspection_accuracy = 0.0
-        self.defects_missed = 0
-        self.inspection_throughput = 0
+        # Inspection
+        self.insp_total = 0
+        self.insp_accuracy = 0.0
+        self.insp_efficiency = 0.0
+        self.insp_throughput = 0
+        self.insp_defects_missed = 0
+        self.insp_error_rate = 0.0
+        self.insp_items_per_min = 0
 
-        self.inspection_accuracy_label.setText("Accuracy: 0.0%")
-        self.defects_missed_label.setText("Defects Missed: 0")
-        self.inspection_throughput_label.setText("Throughput: 0")
+        self.insp_total_label.setText("Total Inspected: 0")
+        self.insp_accuracy_label.setText("Accuracy: 0.0%")
+        self.insp_efficiency_label.setText("Efficiency: 0.0%")
+        self.insp_throughput_label.setText("Throughput: 0")
+        self.insp_defects_missed_label.setText("Defects Missed: 0")
+        self.insp_error_rate_label.setText("Error Rate: 0.0%")
+        self.insp_items_per_min_label.setText("Items/Min: 0")

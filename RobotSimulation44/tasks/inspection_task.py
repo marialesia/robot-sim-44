@@ -241,8 +241,8 @@ class InspectionTask(BaseTask):
             self.worker = None
 
         # reset metrics (optional)
-        if hasattr(self, "metrics_manager"):
-            self.metrics_manager.reset_metrics()
+        # if hasattr(self, "metrics_manager"):
+        #     self.metrics_manager.reset_metrics()
 
     # ---------- Arm path ----------
     def _pose_home(self):

@@ -74,12 +74,13 @@ class SortingWorker(QThread):
         elapsed = time.time() - self.start_time
         self.total_elapsed += elapsed
         self.metrics_ready.emit({
-            "total": self.total,
-            "correct": self.correct,
-            "errors": self.errors,
-            "accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "items_per_min": (self.total / self.total_elapsed) * 60 if elapsed > 0 else 0,
-            "spawn_rate_avg": (self.total / elapsed) if elapsed > 0 else 0,
+            "sort_total": self.total,
+            "sort_accuracy": (self.correct / self.total) * 100 if self.total else 0,
+            "sort_efficiency": (self.correct / self.total) * 100 if self.total else 0,
+            "sort_throughput": self.total / elapsed if elapsed > 0 else 0,
+            "sort_errors": self.errors,
+            "sort_error_rate": (self.errors / self.total) * 100 if self.total else 0,
+            "sort_items_per_min": (self.total / elapsed) * 60 if elapsed > 0 else 0,
             "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
         })
 
@@ -105,15 +106,18 @@ class SortingWorker(QThread):
             if b["color"] == box_color:
                 self.spawned_boxes.remove(b)
                 break
-        
-        # emit live metrics
+
+        elapsed = max(time.time() - getattr(self, 'start_time', time.time()), 1)
+
+        # emit live metrics in full format
         self.metrics_live.emit({
-            "total": self.total,
-            "correct": self.correct,
-            "errors": self.errors,
-            "accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "items_per_min": (self.total / max(time.time() - getattr(self, 'start_time', time.time()), 1)) * 60,
-            "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
+            "sort_total": self.total,
+            "sort_accuracy": (self.correct / self.total) * 100 if self.total else 0,
+            "sort_efficiency": (self.correct / self.total) * 100 if self.total else 0,  # same as accuracy for now
+            "sort_throughput": self.total / elapsed,
+            "sort_errors": self.errors,
+            "sort_error_rate": (self.errors / self.total) * 100 if self.total else 0,
+            "sort_items_per_min": (self.total / elapsed) * 60
         })
 
     # ------------------- internal normalization --------------------

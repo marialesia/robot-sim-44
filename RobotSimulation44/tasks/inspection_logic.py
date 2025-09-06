@@ -22,7 +22,7 @@ class InspectionWorker(QThread):
         self.running = True
 
         self.colors = ["green", "red"]   # only two bins for inspection
-
+        
         self.pace_map = {
             "slow":   (0.1, 0.3),
             "medium": (0.3, 0.7),
@@ -32,8 +32,8 @@ class InspectionWorker(QThread):
         self.total = 0
         self.correct = 0
         self.errors = 0
-
-        self.total_elapsed = 0.0  # accumulate across pauses
+        self.total_elapsed = 0.0
+        self.start_time = None
         self.spawned_boxes = []
 
     # ------------------------ public helpers ------------------------
@@ -65,12 +65,13 @@ class InspectionWorker(QThread):
         elapsed = time.time() - self.start_time
         self.total_elapsed += elapsed
         self.metrics_ready.emit({
-            "total": self.total,
-            "correct": self.correct,
-            "errors": self.errors,
-            "accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "items_per_min": (self.total / self.total_elapsed) * 60 if self.total_elapsed > 0 else 0,
-            "spawn_rate_avg": (self.total / elapsed) if elapsed > 0 else 0,
+            "insp_total": self.total,
+            "insp_accuracy": (self.correct / self.total) * 100 if self.total else 0,
+            "insp_efficiency": (self.correct / self.total) * 100 if self.total else 0,
+            "insp_throughput": self.total / elapsed if elapsed > 0 else 0,
+            "insp_defects_missed": getattr(self, "defects_missed", 0),
+            "insp_error_rate": (self.errors / self.total) * 100 if self.total else 0,
+            "insp_items_per_min": (self.total / elapsed) * 60 if elapsed > 0 else 0,
             "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
         })
 
@@ -89,12 +90,20 @@ class InspectionWorker(QThread):
         Error is injected per error_rate_prob.
         """
         is_error = random.random() < self.error_rate_prob
+
+        # Track errors
         if is_error:
             self.errors += 1
+
+            # New: count only red boxes put in green as defects missed
+            if box_color == "red":
+                self.defects_missed = getattr(self, "defects_missed", 0) + 1
+
             self.box_sorted.emit(box_color, False)
         else:
             self.correct += 1
             self.box_sorted.emit(box_color, True)
+
         self.total += 1
 
         # remove one spawned box (first matching color)
@@ -103,17 +112,20 @@ class InspectionWorker(QThread):
                 self.spawned_boxes.remove(b)
                 break
 
-        # emit live metrics
+        # emit live metrics exactly like SortingWorker
         now = time.time()
         elapsed = max(now - getattr(self, 'start_time', now), 1e-6)
         self.metrics_live.emit({
-            "total": self.total,
-            "correct": self.correct,
-            "errors": self.errors,
-            "accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "items_per_min": (self.total / elapsed) * 60,
+            "insp_total": self.total,
+            "insp_accuracy": (self.correct / self.total) * 100 if self.total else 0,
+            "insp_efficiency": (self.correct / self.total) * 100 if self.total else 0,
+            "insp_throughput": self.total / elapsed,
+            "insp_defects_missed": getattr(self, "defects_missed", 0),
+            "insp_error_rate": (self.errors / self.total) * 100 if self.total else 0,
+            "insp_items_per_min": (self.total / elapsed) * 60,
             "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
         })
+
 
     # ------------------- internal normalization --------------------
 

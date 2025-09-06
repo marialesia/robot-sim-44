@@ -306,8 +306,8 @@ class SortingTask(BaseTask):
             self.worker = None   # fully drop it so we must re-create on start
 
         # ===== reset metrics (optional) =====
-        if hasattr(self, "metrics_manager"):
-            self.metrics_manager.reset_metrics()
+        # if hasattr(self, "metrics_manager"):
+        #     self.metrics_manager.reset_metrics()
 
 
     # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> present -> return) ----------
