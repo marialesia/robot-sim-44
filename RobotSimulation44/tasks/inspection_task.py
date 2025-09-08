@@ -125,6 +125,13 @@ class InspectionTask(BaseTask):
         self._present_slot_override = None
         self._pending_color = None
 
+        # For Reaction time
+        self._error_start_times = {} 
+        self._error_correction_times = []
+        # For Sorting correction accuracy
+        self._total_corrections = 0
+        self._correct_corrections = 0
+
         # Worker
         self.worker = None
 
@@ -553,7 +560,19 @@ class InspectionTask(BaseTask):
 
         rec['current'] = new_slot
 
+        #Add a count to total corrections
+        self._total_corrections += 1
         if new_slot == rec['actual']:
+            #Add a count to correct corrections
+            self._correct_corrections += 1
+
+            # --- RECORD COMPLETION TIME ---
+            import time
+            start_time = self._error_start_times.pop(eid, None)
+            if start_time is not None:
+                elapsed = time.time() - start_time
+                self._error_correction_times.append(elapsed)
+
             print(f"Inspection Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
             get_logger().log_user("Inspection", f"container_{new_slot}", "drop",
                                   f"resolved eid={eid}, color={rec['color']}")
@@ -566,6 +585,9 @@ class InspectionTask(BaseTask):
             self._selected_error = None
         else:
             self._bin_errors[new_slot].append(eid)
+            # --- RECORD PICKUP TIME ---
+            import time
+            self._error_start_times[eid] = time.time()  # timestamp in seconds
             self._selected_error = eid
             self._highlight_bin(new_slot, True)
             print(f"Inspection Task: Moved error #{eid} onto {new_slot} (needs {rec['actual']}). Click again to fix.")
@@ -612,6 +634,15 @@ class InspectionTask(BaseTask):
 
     def _on_metrics_live(self, metrics):
         if hasattr(self, "metrics_manager") and self.metrics_manager:
+            if self._error_correction_times:
+                metrics['insp_avg_correction_time'] = sum(self._error_correction_times) / len(self._error_correction_times)
+            else:
+                metrics['insp_avg_correction_time'] = 0.0
+            if self._total_corrections > 0:
+                metrics['insp_correction_accuracy'] = (self._correct_corrections / self._total_corrections) * 100
+            else:
+                metrics['insp_correction_accuracy'] = 0.0
+            
             self.metrics_manager.update_metrics(metrics)
         else:
             print("Inspection live metrics:", metrics)

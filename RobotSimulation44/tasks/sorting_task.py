@@ -184,6 +184,13 @@ class SortingTask(BaseTask):
         # --- capture color at trigger-time to avoid races ---
         self._pending_color = None  # color captured exactly when the cycle starts
 
+        # For Reaction time
+        self._error_start_times = {} 
+        self._error_correction_times = []
+        # For Sorting correction accuracy
+        self._total_corrections = 0
+        self._correct_corrections = 0
+
         # --- initialize worker ---
         self.worker = None
 
@@ -675,8 +682,19 @@ class SortingTask(BaseTask):
 
         rec['current'] = new_slot
 
+        #Add a count to total corrections
+        self._total_corrections += 1
         if new_slot == rec['actual']:
-            # Resolved!
+            #Add a count to correct corrections
+            self._correct_corrections += 1
+
+            # --- RECORD COMPLETION TIME ---
+            import time
+            start_time = self._error_start_times.pop(eid, None)
+            if start_time is not None:
+                elapsed = time.time() - start_time
+                self._error_correction_times.append(elapsed)
+    
             print(f"Sorting Task: Resolved error #{eid}: moved {rec['color']} to {new_slot} ✅")
             get_logger().log_user("Sorting", f"container_{new_slot}", "drop", f"resolved eid={eid}, color={rec['color']}")
             try:
@@ -725,7 +743,9 @@ class SortingTask(BaseTask):
             rec = {"id": eid, "color": color, "actual": color, "current": into}
             self._errors[eid] = rec
             self._bin_errors[into].append(eid)
-
+            # --- RECORD PICKUP TIME ---
+            import time
+            self._error_start_times[eid] = time.time()  # timestamp in seconds
             msg = f"Sorting Task: sorted {color} into {into} ❌ error (expected {color})"
             print(msg)
             get_logger().log_robot("Sorting", msg)
@@ -736,6 +756,15 @@ class SortingTask(BaseTask):
     def _on_metrics_live(self, metrics):
         """Receive live metrics from the worker and update MetricsManager in real time."""
         if hasattr(self, "metrics_manager") and self.metrics_manager:
+            if self._error_correction_times:
+                metrics['sort_avg_correction_time'] = sum(self._error_correction_times) / len(self._error_correction_times)
+            else:
+                metrics['sort_avg_correction_time'] = 0.0
+            if self._total_corrections > 0:
+                metrics['sort_correction_accuracy'] = (self._correct_corrections / self._total_corrections) * 100
+            else:
+                metrics['sort_correction_accuracy'] = 0.0
+            
             self.metrics_manager.update_metrics(metrics)
         else:
             # fallback for debugging
