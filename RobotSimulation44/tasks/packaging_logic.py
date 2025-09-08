@@ -18,6 +18,7 @@ class PackagingWorker(QThread):
     # Spawner side (already used by your PackagingTask)
     box_spawned = pyqtSignal(dict)     # {"color": <str>, "error": <bool>}
     metrics_ready = pyqtSignal(dict)   # {"total": int, "errors": int, "accuracy": float, "items_per_min": float}
+    metrics_live = pyqtSignal(dict)     # live updated metrics
 
     # New: UI should fade the active container NOW
     # args: mode ("normal"|"underfill"|"overfill"), count_at_trigger, capacity, seconds_elapsed
@@ -39,6 +40,7 @@ class PackagingWorker(QThread):
 
         # Spawner metrics
         self.total = 0
+        self.correct = 0               # <-- track correctly packed boxes
         self.errors = 0
 
         # ---- Per-container decision state (for the current LEFTMOST only) ----
@@ -47,8 +49,12 @@ class PackagingWorker(QThread):
         self._cur_start_ts = None
 
         self._mode = "normal"         # "normal" | "underfill" | "overfill"
-        self._fade_trigger = 0         # count threshold to trigger fade
-        self._fired = False            # ensure we signal only once per container
+        self._fade_trigger = 0        # count threshold to trigger fade
+        self._fired = False           # ensure we signal only once per container
+
+        # Initialize timing for metrics
+        self.start_time = time.time()  # track thread start
+        self.total_elapsed = 0.0       # accumulated time for metrics
 
     # ---------- Spawner thread ----------
     def run(self):
@@ -56,25 +62,33 @@ class PackagingWorker(QThread):
         lo, hi = self.pace_map.get(self.pace, (0.5, 1.0))
 
         while self.running:
+            # Determine if current box is an error
             is_error = (random.random() < self.error_rate)
-            self.total += 1
-            if is_error:
-                self.errors += 1
+            # self.total += 1
+            # if is_error:
+            #     self.errors += 1
+            # else:
+            #     self.correct += 1  # <-- increment correct boxes for metrics
+
+            # Emit box spawned signal
             self.box_spawned.emit({"color": self.color, "error": is_error})
 
             # Variable cadence for a more natural feel
             rate = max(1e-6, random.uniform(lo, hi))   # items per second
             time.sleep(1.0 / rate)
 
-        elapsed = max(1e-6, time.time() - start)
-        spawn_rate_avg = self.total / elapsed
-        accuracy = ((self.total - self.errors) / self.total * 100.0) if self.total else 0.0
-
+        # Compute final metrics
+        elapsed_time = max(1e-6, time.time() - self.start_time)
+        self.total_elapsed += elapsed_time
         self.metrics_ready.emit({
-            "total": self.total,
-            "errors": self.errors,
-            "accuracy": accuracy,
-            "items_per_min": spawn_rate_avg * 60.0,
+            "pack_total": self.total,
+            "pack_accuracy": (self.correct / self.total) * 100 if self.total else 0,
+            "pack_efficiency": (self.correct / self.total) * 100 if self.total else 0,
+            "pack_throughput": self.total / elapsed_time,
+            "pack_errors": self.errors,
+            "pack_error_rate": (self.errors / self.total) * 100 if self.total else 0,
+            "pack_items_per_min": (self.total / elapsed_time) * 60,
+            "pack_error_rate_config_percent": round(self.error_rate * 100, 2)
         })
 
     def stop(self):
@@ -123,11 +137,32 @@ class PackagingWorker(QThread):
 
         self._cur_count += 1
 
+        # Track correct/error packing
+        is_error = random.random() < self.error_rate
+        self.total += 1
+        if is_error:
+            self.errors += 1
+        else:
+            self.correct += 1
+
+        elapsed_time = max(time.time() - self.start_time, 1)
+
+        # emit live metrics in full format
+        self.metrics_live.emit({
+            "pack_total": self.total,
+            "pack_accuracy": (self.correct / self.total) * 100 if self.total else 0,
+            "pack_efficiency": (self.correct / self.total) * 100 if self.total else 0,
+            "pack_throughput": self.total / elapsed_time,
+            "pack_errors": self.errors,
+            "pack_error_rate": (self.errors / self.total) * 100 if self.total else 0,
+            "pack_items_per_min": (self.total / elapsed_time) * 60,
+            "pack_error_rate_config_percent": round(self.error_rate * 100, 2)
+        })
+
+        # Check fade trigger
         if not self._fired and self._cur_count >= self._fade_trigger:
             self._fired = True
-            secs = 0.0
-            if self._cur_start_ts is not None:
-                secs = max(0.0, time.time() - self._cur_start_ts)
+            secs = max(0.0, time.time() - self._cur_start_ts) if self._cur_start_ts else 0.0
             # Tell the UI to fade the current container NOW
             self.container_should_fade.emit(self._mode, self._cur_count, self._cur_capacity, secs)
             return True

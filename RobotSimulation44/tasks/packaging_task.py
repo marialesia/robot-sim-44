@@ -265,6 +265,10 @@ class PackagingTask(BaseTask):
         active["count"] += 1
         self._update_label(active)
 
+        # Print msg
+        msg = f"Packaging Task: Packed {active['count']}/{active['capacity']}"
+        print(msg)
+
         # Log pack
         try:
             get_logger().log_robot("Packaging", f"pack {active['count']}/{active['capacity']}")
@@ -445,6 +449,7 @@ class PackagingTask(BaseTask):
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.metrics_ready.connect(self._on_metrics)
             self.worker.container_should_fade.connect(self._on_worker_fade)
+            self.worker.metrics_live.connect(self._on_metrics_live)
             self.worker.start()
 
         # Reset all containers (0/N, full opacity, not fading) and assign capacities
@@ -741,3 +746,11 @@ class PackagingTask(BaseTask):
                     return True
 
         return super().eventFilter(obj, event)
+
+    def _on_metrics_live(self, metrics):
+        """Receive live metrics from the worker and update MetricsManager in real time."""
+        if hasattr(self, "metrics_manager") and self.metrics_manager:
+            self.metrics_manager.update_metrics(metrics)
+        else:
+            # fallback for debugging
+            print("Live metrics:", metrics)
