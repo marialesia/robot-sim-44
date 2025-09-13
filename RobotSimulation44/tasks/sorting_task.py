@@ -717,7 +717,9 @@ class SortingTask(BaseTask):
             into = color
             msg = f"Sorting Task: sorted {color} into {into} ✅ correct"
             print(msg)
-            get_logger().log_robot("Sorting", msg) 
+            get_logger().log_robot("Sorting", msg)
+            # play a "correct" sound
+            self.audio.play_correct_chime_single()
         else:
             wrong = self._present_slot_override or self._wrong_slot_for(color)
             self._present_slot_override = wrong
