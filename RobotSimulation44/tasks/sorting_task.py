@@ -653,6 +653,10 @@ class SortingTask(BaseTask):
                    f"Click the correct container ({rec['actual']}).")
             print(msg)
             get_logger().log_user("Sorting", f"container_{slot}", "pick", f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
+
+            #play "correct" sound when box is fixed
+            self.audio.play_correct_chime_()
+
             # update flashing/badges immediately (selected bin should stop flashing)
             self._apply_flash_colors()
             return
@@ -719,7 +723,7 @@ class SortingTask(BaseTask):
             print(msg)
             get_logger().log_robot("Sorting", msg)
             # play a "correct" sound
-            self.audio.play_correct_chime_single()
+            self.audio.play_correct_chime()
         else:
             wrong = self._present_slot_override or self._wrong_slot_for(color)
             self._present_slot_override = wrong
@@ -737,7 +741,7 @@ class SortingTask(BaseTask):
             get_logger().log_robot("Sorting", msg)
 
             # play an "incorrect" sound
-            self.audio.play_incorrect_with_alarm()
+            self.audio.play_incorrect_chime()
 
             # Update flashing/badges immediately so the bin shows this (oldest) error color
             self._apply_flash_colors()
