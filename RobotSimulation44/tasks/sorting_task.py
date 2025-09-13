@@ -4,6 +4,7 @@ from PyQt5.QtCore import Qt, QTimer, QEvent
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy, QLabel
 from .base_task import BaseTask, StorageContainerWidget
 from .sorting_logic import SortingWorker
+from audio_manager import AudioManager
 import random  # for picking a wrong bin on purpose when worker flags an error
 from event_logger import get_logger 
 
@@ -11,6 +12,9 @@ from event_logger import get_logger
 class SortingTask(BaseTask):
     def __init__(self):
         super().__init__(task_name="Sorting")
+
+        # ---- Audio ----
+        self.audio = AudioManager()
 
         # ---- Robot arm visuals ----
         self.arm.shoulder_angle = -90
