@@ -736,6 +736,9 @@ class SortingTask(BaseTask):
             print(msg)
             get_logger().log_robot("Sorting", msg)
 
+            # play an "incorrect" sound
+            self.audio.play_incorrect_with_alarm()
+
             # Update flashing/badges immediately so the bin shows this (oldest) error color
             self._apply_flash_colors()
 
