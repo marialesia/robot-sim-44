@@ -206,6 +206,9 @@ class SortingTask(BaseTask):
         self._present_slot_override = None
         self._pending_color = None
 
+        # playing conveyor sound
+        self.audio.start_conveyor()
+
         # start arm pick monitor
         if not self._pick_timer.isActive():
             sh, el = self._pose_home()
@@ -243,6 +246,10 @@ class SortingTask(BaseTask):
         if self._flash_timer.isActive():
             self._flash_timer.stop()
 
+        #stop conveyor sound and alarm
+        self.audio.stop_conveyor()
+        self.audio.stop_alarm()
+
         # reset borders and hide badges
         for slot, w in self._slot_to_widget.items():
             w.border = self._orig_borders.get(slot, w.border)
@@ -277,6 +284,10 @@ class SortingTask(BaseTask):
             self._pick_timer.stop()
         if self._flash_timer.isActive():
             self._flash_timer.stop()
+
+        #stop conveyor sound and alarm
+        self.audio.stop_conveyor()
+        self.audio.stop_alarm()
 
         # ===== clear all boxes from the conveyor =====
         if hasattr(self.conveyor, "_boxes"):
@@ -392,6 +403,8 @@ class SortingTask(BaseTask):
             elif self._pick_state == "descend":
                 # --- Trigger sorting only when arm reaches box ---
                 nearest_color = self._color_of_box_in_window()
+                # play robotic arm audio
+                self.audio.play_robotic_arm()
                 if nearest_color:
                     hex_color = nearest_color.name() if hasattr(nearest_color, "name") else nearest_color
                     COLOR_MAP = {
@@ -655,7 +668,7 @@ class SortingTask(BaseTask):
             get_logger().log_user("Sorting", f"container_{slot}", "pick", f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
 
             #play "correct" sound when box is fixed
-            self.audio.play_correct_chime_()
+            self.audio.play_correct()
 
             # update flashing/badges immediately (selected bin should stop flashing)
             self._apply_flash_colors()
@@ -723,7 +736,7 @@ class SortingTask(BaseTask):
             print(msg)
             get_logger().log_robot("Sorting", msg)
             # play a "correct" sound
-            self.audio.play_correct_chime()
+            self.audio.play_correct()
         else:
             wrong = self._present_slot_override or self._wrong_slot_for(color)
             self._present_slot_override = wrong
@@ -740,8 +753,8 @@ class SortingTask(BaseTask):
             print(msg)
             get_logger().log_robot("Sorting", msg)
 
-            # play an "incorrect" sound
-            self.audio.play_incorrect_chime()
+            # play incorrect sound, then alarm
+            self.audio.play_incorrect_with_alarm()
 
             # Update flashing/badges immediately so the bin shows this (oldest) error color
             self._apply_flash_colors()
