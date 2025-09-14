@@ -716,7 +716,7 @@ class SortingTask(BaseTask):
                 elapsed = time.time() - start_time
                 self._error_correction_times.append(elapsed)
     
-            print(f"Sorting Task: Resolved error #{eid}: moved {rec['color']} to {new_slot} ✅")
+            print(f"Sorting Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
             get_logger().log_user("Sorting", f"container_{new_slot}", "drop", f"resolved eid={eid}, color={rec['color']}")
             try:
                 if eid in self._bin_errors.get(new_slot, []):
@@ -725,6 +725,18 @@ class SortingTask(BaseTask):
                 pass
             del self._errors[eid]
             self._selected_error = None
+            # --- Stop alarm only when ALL errors are cleared ---
+            try:
+                # Authoritative check via error registry
+                no_errors_left = not self._errors
+                # Belt-and-braces: also ensure per-bin lists are empty
+                if not no_errors_left:
+                    no_errors_left = all(len(v) == 0 for v in self._bin_errors.values())
+                if no_errors_left:
+                    self.audio.stop_alarm()
+            except Exception:
+                # Never let audio issues break the UI flow
+                pass
         else:
             # Still wrong: place into this bin and keep “holding” it
             self._bin_errors[new_slot].append(eid)
@@ -750,7 +762,7 @@ class SortingTask(BaseTask):
         if correct:
             self._present_slot_override = color
             into = color
-            msg = f"Sorting Task: sorted {color} into {into} ✅ correct"
+            msg = f"Sorting Task: sorted {color} into {into} - correct"
             print(msg)
             get_logger().log_robot("Sorting", msg)
             # play a "correct" sound
@@ -769,7 +781,7 @@ class SortingTask(BaseTask):
             # --- RECORD PICKUP TIME ---
             import time
             self._error_start_times[eid] = time.time()  # timestamp in seconds
-            msg = f"Sorting Task: sorted {color} into {into} ❌ error (expected {color})"
+            msg = f"Sorting Task: sorted {color} into {into} - error (expected {color})"
             print(msg)
             get_logger().log_robot("Sorting", msg)
 

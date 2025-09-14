@@ -5,6 +5,10 @@ from PyQt5.QtCore import QUrl, QTimer
 
 class AudioManager:
     def __init__(self, base_path="sounds/"):
+        # Timer used to delay starting the alarm after incorrect chime
+        self.alarm_delay_timer = QTimer()
+        self.alarm_delay_timer.setSingleShot(True)
+        self.alarm_delay_timer.timeout.connect(self.start_alarm)
         # Conveyor belt (looping)
         self.conveyor = QSoundEffect()
         self.conveyor.setSource(QUrl.fromLocalFile(base_path + "conveyor_belt_single.wav"))
@@ -55,12 +59,35 @@ class AudioManager:
 
     # Incorrect chime + alarm (delayed)
     def play_incorrect_with_alarm(self, delay_ms=1200):
+        # Play chime, then arm a single-shot timer for the alarm.
+        # If a previous alarm delay is pending, cancel it first.
         self.incorrect_chime.play()
-        QTimer.singleShot(delay_ms, self.start_alarm)
-
-    # Alarm controls
+        try:
+            if self.alarm_delay_timer.isActive():
+                self.alarm_delay_timer.stop()
+        except Exception:
+            pass
+        self.alarm_delay_timer.start(delay_ms)
+# Alarm controls
     def start_alarm(self):
         self.alarm.play()
 
     def stop_alarm(self):
-        self.alarm.stop()
+        """Queue alarm stop to next event loop tick to reduce UI lag."""
+        try:
+            if hasattr(self, 'alarm') and self.alarm.isPlaying():
+                QTimer.singleShot(0, self.alarm.stop)
+        except Exception:
+            # Fallback to immediate stop if anything odd happens
+            try:
+                self.alarm.stop()
+            except Exception:
+                pass
+
+    def cancel_alarm_delay(self):
+        """Cancel any pending delayed alarm start."""
+        try:
+            if self.alarm_delay_timer.isActive():
+                self.alarm_delay_timer.stop()
+        except Exception:
+            pass
