@@ -518,17 +518,19 @@ class InspectionTask(BaseTask):
     def _on_container_clicked(self, slot):
         get_logger().log_user("Inspection", f"container_{slot}", "click", "container clicked")
 
-        # No selection yet: try pick one error from this bin
+        # === CASE 1: Not holding anything, attempt to PICK from this bin ===
         if self._selected_error is None:
             ids = self._bin_errors.get(slot, [])
             if not ids:
                 print(f"(Inspection Task: No errors in {slot} to pick up)")
                 get_logger().log_user("Inspection", f"container_{slot}", "click", "no errors to pick up")
                 return
+
             eid = ids.pop(0)
             rec = self._errors.get(eid)
             if not rec:
                 return
+
             self._selected_error = eid
             self._highlight_bin(slot, True)
             msg = (f"Inspection Task: Picked error #{eid}: {rec['color']} currently in {slot}. "
@@ -536,10 +538,11 @@ class InspectionTask(BaseTask):
             print(msg)
             get_logger().log_user("Inspection", f"container_{slot}", "pick",
                                   f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
+
             self._apply_flash_colors()
             return
 
-        # Dropping selection
+        # === CASE 2: Holding an error, drop it into clicked bin (only one attempt allowed) ===
         eid = self._selected_error
         rec = self._errors.get(eid)
         if not rec:
@@ -547,6 +550,7 @@ class InspectionTask(BaseTask):
             self._apply_flash_colors()
             return
 
+        # Remove highlight from previous bin
         self._highlight_bin(rec['current'], False)
         prev = rec['current']
         new_slot = slot
@@ -558,41 +562,49 @@ class InspectionTask(BaseTask):
             pass
 
         rec['current'] = new_slot
-
-        #Add a count to total corrections
         self._total_corrections += 1
-        if new_slot == rec['actual']:
-            #Add a count to correct corrections
-            self._correct_corrections += 1
 
-            # --- RECORD COMPLETION TIME ---
+        if new_slot == rec['actual']:
+            # Correct placement — resolve error
+            self._correct_corrections += 1
             import time
-            start_time = self._error_start_times.pop(eid, None)
-            if start_time is not None:
-                elapsed = time.time() - start_time
+            self._error_start_times.pop(eid, None)
 
             print(f"Inspection Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
             get_logger().log_user("Inspection", f"container_{new_slot}", "drop",
                                   f"resolved eid={eid}, color={rec['color']}")
+
             try:
                 if eid in self._bin_errors.get(new_slot, []):
                     self._bin_errors[new_slot].remove(eid)
             except ValueError:
                 pass
-            del self._errors[eid]
-            self._selected_error = None
-        else:
-            self._bin_errors[new_slot].append(eid)
-            # --- RECORD PICKUP TIME ---
-            import time
-            self._error_start_times[eid] = time.time()  # timestamp in seconds
-            self._selected_error = eid
-            self._highlight_bin(new_slot, True)
-            print(f"Inspection Task: Moved error #{eid} onto {new_slot} (needs {rec['actual']}). Click again to fix.")
-            get_logger().log_user("Inspection", f"container_{new_slot}", "drop",
-                                  f"still wrong eid={eid}, needs={rec['actual']}")
+            if eid in self._errors:
+                del self._errors[eid]
 
+        else:
+            # Wrong placement — still clear the error
+            import time
+            self._error_start_times.pop(eid, None)
+
+            print(f"Inspection Task: Error #{eid} placed incorrectly in {new_slot} and cleared (was {rec['actual']})")
+            get_logger().log_user("Inspection", f"container_{new_slot}", "drop",
+                                  f"final incorrect eid={eid}, expected={rec['actual']}")
+
+            try:
+                if eid in self._bin_errors.get(new_slot, []):
+                    self._bin_errors[new_slot].remove(eid)
+            except ValueError:
+                pass
+            if eid in self._errors:
+                del self._errors[eid]
+
+        # In all cases, deselect after the first drop (no second chance)
+        self._selected_error = None
+
+        # Refresh flashing/badges
         self._apply_flash_colors()
+
 
     # ===== Worker signal handlers =====
     def spawn_box_from_worker(self, box_data):
