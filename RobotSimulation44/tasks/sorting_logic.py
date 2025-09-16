@@ -75,13 +75,8 @@ class SortingWorker(QThread):
         self.total_elapsed += elapsed
         self.metrics_ready.emit({
             "sort_total": self.total,
-            "sort_accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "sort_efficiency": (self.correct / self.total) * 100 if self.total else 0,
-            "sort_throughput": self.total / elapsed if elapsed > 0 else 0,
             "sort_errors": self.errors,
-            "sort_error_rate": (self.errors / self.total) * 100 if self.total else 0,
-            "sort_items_per_min": (self.total / elapsed) * 60 if elapsed > 0 else 0,
-            "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
+            "sort_error_rate": (self.errors / self.total) * 100 if self.total else 0
         })
 
     def pause(self):
@@ -112,12 +107,8 @@ class SortingWorker(QThread):
         # emit live metrics in full format
         self.metrics_live.emit({
             "sort_total": self.total,
-            "sort_accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "sort_efficiency": (self.correct / self.total) * 100 if self.total else 0,  # same as accuracy for now
-            "sort_throughput": self.total / elapsed,
             "sort_errors": self.errors,
-            "sort_error_rate": (self.errors / self.total) * 100 if self.total else 0,
-            "sort_items_per_min": (self.total / elapsed) * 60
+            "sort_error_rate": (self.errors / self.total) * 100 if self.total else 0
         })
 
     # ------------------- internal normalization --------------------

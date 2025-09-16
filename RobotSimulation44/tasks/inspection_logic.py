@@ -66,13 +66,8 @@ class InspectionWorker(QThread):
         self.total_elapsed += elapsed
         self.metrics_ready.emit({
             "insp_total": self.total,
-            "insp_accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "insp_efficiency": (self.correct / self.total) * 100 if self.total else 0,
-            "insp_throughput": self.total / elapsed if elapsed > 0 else 0,
-            "insp_defects_missed": getattr(self, "defects_missed", 0),
-            "insp_error_rate": (self.errors / self.total) * 100 if self.total else 0,
-            "insp_items_per_min": (self.total / elapsed) * 60 if elapsed > 0 else 0,
-            "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
+            "insp_errors": self.errors,
+            "insp_error_rate": (self.errors / self.total) * 100 if self.total else 0
         })
 
     def pause(self):
@@ -117,13 +112,8 @@ class InspectionWorker(QThread):
         elapsed = max(now - getattr(self, 'start_time', now), 1e-6)
         self.metrics_live.emit({
             "insp_total": self.total,
-            "insp_accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "insp_efficiency": (self.correct / self.total) * 100 if self.total else 0,
-            "insp_throughput": self.total / elapsed,
-            "insp_defects_missed": getattr(self, "defects_missed", 0),
-            "insp_error_rate": (self.errors / self.total) * 100 if self.total else 0,
-            "insp_items_per_min": (self.total / elapsed) * 60,
-            "error_rate_config_percent": round(self.error_rate_prob * 100, 2)
+            "insp_errors": self.errors,
+            "insp_error_rate": (self.errors / self.total) * 100 if self.total else 0
         })
 
 

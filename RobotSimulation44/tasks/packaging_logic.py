@@ -82,13 +82,8 @@ class PackagingWorker(QThread):
         self.total_elapsed += elapsed_time
         self.metrics_ready.emit({
             "pack_total": self.total,
-            "pack_accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "pack_efficiency": (self.correct / self.total) * 100 if self.total else 0,
-            "pack_throughput": self.total / elapsed_time,
             "pack_errors": self.errors,
-            "pack_error_rate": (self.errors / self.total) * 100 if self.total else 0,
-            "pack_items_per_min": (self.total / elapsed_time) * 60,
-            "pack_error_rate_config_percent": round(self.error_rate * 100, 2)
+            "pack_error_rate": (self.errors / self.total) * 100 if self.total else 0
         })
 
     def stop(self):
@@ -150,13 +145,8 @@ class PackagingWorker(QThread):
         # emit live metrics in full format
         self.metrics_live.emit({
             "pack_total": self.total,
-            "pack_accuracy": (self.correct / self.total) * 100 if self.total else 0,
-            "pack_efficiency": (self.correct / self.total) * 100 if self.total else 0,
-            "pack_throughput": self.total / elapsed_time,
             "pack_errors": self.errors,
-            "pack_error_rate": (self.errors / self.total) * 100 if self.total else 0,
-            "pack_items_per_min": (self.total / elapsed_time) * 60,
-            "pack_error_rate_config_percent": round(self.error_rate * 100, 2)
+            "pack_error_rate": (self.errors / self.total) * 100 if self.total else 0
         })
 
         # Check fade trigger
