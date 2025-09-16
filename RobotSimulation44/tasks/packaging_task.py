@@ -1,5 +1,5 @@
 from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation
+from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation, QPoint
 from PyQt5.QtWidgets import QLabel, QGraphicsOpacityEffect, QHBoxLayout, QSizePolicy, QWidget
 from .base_task import BaseTask, StorageContainerWidget
 from .packaging_logic import PackagingWorker
@@ -35,7 +35,7 @@ class PackagingTask(BaseTask):
                 w.fill_bottom = QColor("#bff0d3")
                 w.rib = QColor(31, 122, 58, 110)
 
-        _style_container(self.container)  # use BaseTask's default as the first
+        _style_container(self.container)  # style the BaseTask's default as the first
 
         # ---- Layout: keep conveyor + arm; replace single container with a row of 4 ----
         self.set_positions(
@@ -152,6 +152,7 @@ class PackagingTask(BaseTask):
         self._flash_timer.setInterval(350)
         self._flash_timer.timeout.connect(self._on_flash_tick)
 
+        # repaint once
         self.arm.update()
         self.conveyor.update()
         for rec in self._containers:
@@ -228,51 +229,99 @@ class PackagingTask(BaseTask):
                 pass
             self._apply_error_visuals()
 
+    # ---------- Departing box helper ----------
+    def _launch_departing_box(self, rec, px_per_tick: int = 5, interval_ms: int = 16, max_travel_px: int = 0):
+        """Clone the container, slide it left, and vanish after max_travel_px pixels."""
+        w = rec["widget"]
+
+        clone = StorageContainerWidget(self)
+        clone.resize(w.size())
+        clone.move(w.mapTo(self, w.rect().topLeft()))
+
+        clone.border = w.border
+        clone.fill_top = w.fill_top
+        clone.fill_bottom = w.fill_bottom
+        clone.rib = w.rib
+        clone.show()
+
+        travelled = {"dx": 0}
+
+        def step():
+            x, y = clone.pos().x(), clone.pos().y()
+            travelled["dx"] += px_per_tick
+            if travelled["dx"] >= max_travel_px:
+                slide_timer.stop()
+                clone.deleteLater()
+                return
+            clone.move(x - px_per_tick, y)
+
+        slide_timer = QTimer(self)
+        slide_timer.timeout.connect(step)
+        slide_timer.start(interval_ms)
+
+
     # ---------- Packing count ----------
     def _on_item_packed(self):
         if not self._containers:
             return
         active = self._containers[0]
+
         if active["fading"]:
             return
+
         active["count"] += 1
         self._update_label(active)
+
         msg = f"Packaging Task: Packed {active['count']}/{active['capacity']}"
         print(msg)
+
         try:
             get_logger().log_robot("Packaging", f"pack {active['count']}/{active['capacity']}")
         except Exception:
             pass
+
         if self.worker:
             self.worker.record_pack()
+
         need_fade = self._should_fade_current
         if not self.worker:
             need_fade = need_fade or (active["count"] >= active["capacity"])
+
         if need_fade and not active["fading"]:
             active["fading"] = True
             self._should_fade_current = False
             eff = active["effect"]; anim = active["anim"]; w = active["widget"]
+
             anim.stop()
             eff.setOpacity(1.0)
             anim.setStartValue(1.0)
             anim.setEndValue(0.0)
+
             def _finished():
+                # launch clone sliding left (tweak speed/edge behavior here if you like)
+                self._launch_departing_box(active, px_per_tick=5, interval_ms=16, max_travel_px=230)
+
+                # normal container shift logic
                 w.hide()
                 self._row_layout.removeWidget(w)
                 try:
                     self._containers.pop(0)
                 except Exception:
                     pass
+
                 if self.worker and self.worker.isRunning():
                     new_cap = PackagingWorker.pick_capacity()
                     new_rec = self._create_new_container(initial_cap=new_cap)
                 else:
                     new_rec = self._create_new_container(initial_cap=None)
+
                 self._containers.append(new_rec)
                 self._row_layout.addWidget(new_rec["widget"])
+
                 for rec2 in self._containers:
                     self._position_label(rec2)
                     self._position_badge(rec2)
+
                 if self.worker and self._containers:
                     leftmost = self._containers[0]
                     self.worker.begin_container(leftmost["capacity"])
@@ -283,7 +332,9 @@ class PackagingTask(BaseTask):
                         )
                     except Exception:
                         pass
+
                 self._apply_error_visuals()
+
                 try:
                     get_logger().log_robot(
                         "Packaging",
@@ -291,6 +342,7 @@ class PackagingTask(BaseTask):
                     )
                 except Exception:
                     pass
+
             try:
                 anim.finished.disconnect()
             except Exception:
@@ -311,7 +363,7 @@ class PackagingTask(BaseTask):
             w.fill_top = QColor("#dbe8ff")
             w.fill_bottom = QColor("#c7daff")
             w.rib = QColor(43, 74, 145, 110)
-        else:  # green
+        else:
             w.border = QColor("#1f7a3a")
             w.fill_top = QColor("#d9f7e6")
             w.fill_bottom = QColor("#bff0d3")
