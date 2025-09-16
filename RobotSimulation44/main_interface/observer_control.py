@@ -37,16 +37,26 @@ class ObserverControl(QObject):
         # --- New Save / Load buttons ---
         self.save_button = QPushButton("Save Params")
         self.load_button = QPushButton("Load Params")
+        # --- New user input for time limit ---
+        self.time_limit_input = QLineEdit()
+        self.time_limit_input.setPlaceholderText("Time Limit")
+        self.time_limit_input.setFixedWidth(70)
         button_row.addWidget(self.start_button)
         button_row.addWidget(self.pause_button)
         button_row.addWidget(self.stop_button)
         button_row.addWidget(self.save_button)
         button_row.addWidget(self.load_button)
+        button_row.addWidget(self.time_limit_input)
         self.control_bar.addLayout(button_row)
 
         # TIMER
         self.timer_label = QLabel("00:00")
         button_row.addWidget(self.timer_label)  
+
+        # Time Input handler
+        self.time_limit_input.editingFinished.connect(self.format_time_input)
+        self.flash_count = 0
+        self.flash_timer = None
 
         self.session_timer = QTimer()
         self.session_timer.timeout.connect(self.update_timer)
@@ -267,6 +277,7 @@ class ObserverControl(QObject):
         self.session_timer.start(1000)  # update every second
         self.running = True
         self.timer_label.setText("00:00")  # reset display
+        self.time_limit_input.setDisabled(True)
         # Log start
         get_logger().log_user("ObserverControl", "Session Timer", "start", "Timer started")
 
@@ -276,6 +287,7 @@ class ObserverControl(QObject):
             self.elapsed_time += self.start_time.secsTo(QTime.currentTime())
             self.session_timer.stop()
             self.running = False
+            self.time_limit_input.setDisabled(False)
             # Log stop
             get_logger().log_user("ObserverControl", "Session Timer", "stop", "Timer paused")
 
@@ -283,15 +295,36 @@ class ObserverControl(QObject):
         if self.start_time and self.running:
             total_seconds = self.elapsed_time + self.start_time.secsTo(QTime.currentTime())
             mins, secs = divmod(total_seconds, 60)
-            self.timer_label.setText(f"{mins:02}:{secs:02}")
+            self.timer_label.setText(f"{mins:02}:{secs:02}")  # MM:SS only
+
+            # --- Check for time limit ---
+            try:
+                # parse MM:SS from input
+                m, s = map(int, self.time_limit_input.text().split(":"))
+                time_limit_seconds = m * 60 + s
+
+                if total_seconds >= time_limit_seconds:
+                    self.stop_timer()
+                    self.stop_pressed.emit()
+                    get_logger().log_user("ObserverControl", "Session Timer", "stop", "Time limit reached, tasks stopped")
+
+                    # Flash red
+                    self.timer_label.setStyleSheet("color: red")
+                    self.flash_count = 0
+                    self.flash_timer = QTimer()
+                    self.flash_timer.timeout.connect(self._flash_timer_label)
+                    self.flash_timer.start(500)
+            except ValueError:
+                pass  # ignore invalid input
 
     # --- SAVE / LOAD FUNCTIONS ---
     def save_parameters(self):
-        """Save current dropdown selections, checkbox states, and scenario name to a JSON file."""
+        """Save current dropdown selections, checkbox states, scenario name, and time limit to a JSON file."""
         scenario_name = self.scenario_name_input.text().strip() or "Unnamed_Scenario"
 
         params = {
             "scenario_name": scenario_name,
+            "time_limit": self.time_limit_input.text().strip() or "00:00",
             "sorting": {
                 "enabled": self.sorting_checkbox.isChecked(),
                 "pace": self.sort_pace_dropdown.currentText(),
@@ -310,12 +343,11 @@ class ObserverControl(QObject):
             }
         }
 
-        # --- Use scenario name as default file name ---
         default_filename = f"{scenario_name}.json"
         file_path, _ = QFileDialog.getSaveFileName(
-            None, 
-            "Save Parameters", 
-            default_filename,   # <--- prefilled filename
+            None,
+            "Save Parameters",
+            default_filename,
             "JSON Files (*.json)"
         )
 
@@ -325,7 +357,7 @@ class ObserverControl(QObject):
             print(f"Parameters saved to {file_path} with scenario name '{scenario_name}'")
 
     def load_parameters(self):
-        """Load dropdown selections, checkbox states, and scenario name from a JSON file."""
+        """Load dropdown selections, checkbox states, scenario name, and time limit from a JSON file."""
         file_path, _ = QFileDialog.getOpenFileName(None, "Load Parameters", "", "JSON Files (*.json)")
         if not file_path:
             return
@@ -335,6 +367,9 @@ class ObserverControl(QObject):
 
         # --- Scenario Name ---
         self.scenario_name_input.setText(params.get("scenario_name", ""))
+
+        # --- Time Limit ---
+        self.time_limit_input.setText(params.get("time_limit", "00:00"))
 
         # --- Sorting ---
         if "sorting" in params:
@@ -361,3 +396,36 @@ class ObserverControl(QObject):
         # Trigger task update
         self.update_tasks()
         print(f"Parameters loaded from {file_path}")
+
+    def format_time_input(self):
+        """Formats user input as MM:SS."""
+        text = self.time_limit_input.text().strip()
+        if not text:
+            self.time_limit_input.setText("00:00")
+            return
+        try:
+            if ":" in text:
+                parts = list(map(int, text.split(":")))
+                while len(parts) < 2:
+                    parts.insert(0, 0)  # pad missing minutes
+                m, s = parts
+            else:
+                # just minutes entered
+                m, s = int(text), 0
+            m = max(0, min(m, 99))  # clamp minutes to 0–99
+            s = max(0, min(s, 59))  # clamp seconds
+            self.time_limit_input.setText(f"{m:02}:{s:02}")
+        except ValueError:
+            self.time_limit_input.setText("00:00")
+
+    def _flash_timer_label(self):
+        if self.flash_count >= 100:  # flash 50 times - can be changed
+            if self.flash_timer:
+                self.flash_timer.stop()
+            self.timer_label.setStyleSheet("")
+            return
+        if self.flash_count % 2 == 0:
+            self.timer_label.setStyleSheet("color: red;")
+        else:
+            self.timer_label.setStyleSheet("")
+        self.flash_count += 1
