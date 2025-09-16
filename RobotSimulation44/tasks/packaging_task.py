@@ -1,16 +1,22 @@
-# tasks/packaging_task.py
+
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation
 from PyQt5.QtWidgets import QLabel, QGraphicsOpacityEffect, QHBoxLayout, QSizePolicy, QWidget
 from .base_task import BaseTask, StorageContainerWidget
 from .packaging_logic import PackagingWorker
 from event_logger import get_logger
+from audio_manager import AudioManager
 import random
+import time
 
 
 class PackagingTask(BaseTask):
     def __init__(self):
         super().__init__(task_name="Packaging")
+
+        # ---- Audio ----
+        self.audio = AudioManager()
+        self._alarm_active = False  # track alarm state like SortingTask
 
         # ---- Robot arm visuals ----
         self.arm.shoulder_angle = -90
@@ -63,7 +69,7 @@ class PackagingTask(BaseTask):
         self._row_layout = QHBoxLayout(self._row)
         self._row_layout.setContentsMargins(0, 0, 0, 0)
         self._row_layout.setSpacing(12)
-        # rec: widget,label,capacity,count,effect,anim,fading,error,fixed,orig_border,badge,color,mis_color,batch_spawned
+        # rec: widget,label,capacity,count,effect,anim,fading,error,fixed,orig_border,badge,color,mis_color,batch_spawned,err_start
         self._containers = []
 
         def _make_badge(parent_w):
@@ -116,6 +122,7 @@ class PackagingTask(BaseTask):
                 "color": c,         # container's color (red/blue/green)
                 "mis_color": None,  # wrong box color when mis-sorted into front
                 "batch_spawned": False,
+                "err_start": None,  # timestamp when this container entered error state
             }
             self._position_badge(rec)
             return rec
@@ -144,7 +151,7 @@ class PackagingTask(BaseTask):
 
         # Timed drip-spawner for batches
         self._box_timer = QTimer(self)
-        self._box_timer.setInterval(1000)          # drip speed; tweak if needed - adjusts the distance between each box in a set
+        self._box_timer.setInterval(1000)          # drip speed; tweak if needed
         self._box_timer.timeout.connect(self._drip_spawn_tick)
 
         # Pending batch state
@@ -206,13 +213,13 @@ class PackagingTask(BaseTask):
         rec["label"].setText(f"{rec['count']}/{rec['capacity']}")
         self._position_label(rec)
 
-    # ---------- Error visuals ----------
+    # ---------- Error visuals + alarm parity with Sorting ----------
     def _apply_error_visuals(self):
         for i, rec in enumerate(self._containers):
             w = rec["widget"]
             badge = rec.get("badge")
 
-            # Selection highlight for front takes priority (like SortingTask)
+            # Selection highlight for front takes priority
             if i == 0 and self._selected_active:
                 w.border = QColor("#ffbf00")  # amber
                 w.update()
@@ -255,6 +262,9 @@ class PackagingTask(BaseTask):
                 w.border = rec.get("orig_border", w.border)
                 w.update()
 
+        # Keep alarm state in sync after drawing
+        self._update_alarm_state()
+
     def _on_flash_tick(self):
         self._flash_on = not self._flash_on
         self._apply_error_visuals()
@@ -274,6 +284,39 @@ class PackagingTask(BaseTask):
             "#1f7a3a": "green",
         }
         return hex_map.get(hexv)
+
+    # ---------- Alarm helpers (same behavior as Sorting) ----------
+    def _any_error_and_oldest_age(self):
+        """Returns (has_any_error: bool, oldest_age_seconds: float)."""
+        oldest = 0.0
+        found = False
+        now = time.time()
+        for rec in self._containers:
+            if rec.get("error"):
+                found = True
+                t0 = rec.get("err_start")
+                if t0:
+                    age = now - t0
+                    if age > oldest:
+                        oldest = age
+        return found, oldest
+
+    def _update_alarm_state(self):
+        """Start alarm only if an error has persisted >=2s; stop when all cleared."""
+        has_err, oldest_age = self._any_error_and_oldest_age()
+        if has_err:
+            if oldest_age >= 2.0 and not self._alarm_active:
+                self.audio.start_alarm()
+                self._alarm_active = True
+        else:
+            if self._alarm_active:
+                self.audio.stop_alarm()
+                self._alarm_active = False
+            # also cancel any pending delayed starts
+            try:
+                self.audio.cancel_alarm_delay()
+            except Exception:
+                pass
 
     # ---------- Scheduling & spawning ----------
     def _count_boxes_on_belt(self, color: str) -> int:
@@ -303,11 +346,8 @@ class PackagingTask(BaseTask):
         need = max(0, cap - cnt - on_belt - scheduled)
 
         if need <= 0:
-            # nothing to add; may still be mid-drip, but we're at/over target
             front["batch_spawned"] = True
-            # If we're over for any reason, trim the scheduled remainder
             if self._batch_active and self._batch_color == color:
-                # recompute to avoid overshoot
                 excess = cnt + on_belt + self._batch_remaining - cap
                 if excess > 0:
                     self._batch_remaining = max(0, self._batch_remaining - excess)
@@ -413,6 +453,12 @@ class PackagingTask(BaseTask):
         if active["fading"]:
             return
 
+        # play robotic arm sound at the moment of pack
+        try:
+            self.audio.play_robotic_arm()
+        except Exception:
+            pass
+
         raw_packed = getattr(self.arm, "held_box_color", None)
         packed_color = self._normalize_box_color(raw_packed)
         active_color = self._normalize_box_color(active.get("color"))
@@ -425,19 +471,36 @@ class PackagingTask(BaseTask):
         except Exception:
             pass
 
-        # Only flag error when known mismatch
+        # --- Error vs Correct handling ---
         if packed_color is not None and active_color is not None and (packed_color != active_color):
-            active["error"] = True
-            active["fixed"] = False
-            active["mis_color"] = packed_color
+            # Enter/refresh error state
+            if not active.get("error"):
+                active["error"] = True
+                active["fixed"] = False
+                active["mis_color"] = packed_color
+                active["err_start"] = time.time()
+                # Play incorrect chime once on entering error
+                try:
+                    self.audio.play_incorrect()
+                except Exception:
+                    pass
+            # still errored; keep the original err_start so alarm delay is measured from first moment
             self._apply_error_visuals()
             if self.worker:
                 self.worker.rearm_fade()
         else:
-            if active.get("mis_color") is None and active.get("error"):
+            # Correct placement path
+            if active.get("error"):
+                # was in error, now clear
                 active["error"] = False
                 active["fixed"] = False
+                active["err_start"] = None
                 self._apply_error_visuals()
+            # Play correct chime for ANY correct pack
+            try:
+                self.audio.play_correct()
+            except Exception:
+                pass
 
         if self.worker:
             self.worker.record_pack()
@@ -445,39 +508,108 @@ class PackagingTask(BaseTask):
         # Fade condition: always fade once capacity reached, even if error == True
         if self._should_fade_current or (active["count"] >= active["capacity"] > 0):
             if not active["fading"]:
-                self._begin_fade_and_shift()
+                self._begin_fade_and_shift_front()
 
-    def _begin_fade_and_shift(self):
+    # ---------- Fade helpers (front and mid-line) ----------
+    def _begin_fade_and_shift_front(self):
         """Fade current front, shift row, append next color in rotation."""
         if not self._containers:
             return
-        active = self._containers[0]
-        active["fading"] = True
-        self._should_fade_current = False
+        self._fade_and_remove_at_index(0)
 
-        # stop any ongoing batch for this lead
-        self._batch_active = False
-        self._batch_remaining = 0
-        self._batch_color = None
-        if self._box_timer.isActive():
-            self._box_timer.stop()
+    def _begin_fade_and_shift_other(self, idx: int):
+        """Fade out container at index `idx` (0-based), then remove it and append a new
+        container using the rotation color. If idx == 0, delegate to _begin_fade_and_shift()."""
+        if not (0 <= idx < len(self._containers)):
+            return
+        if idx == 0:
+            # Use the existing front-fade logic
+            self._begin_fade_and_shift()
+            return
 
-        # clear pick selection when fading out the front
-        self._selected_active = False
-        self._selected_expected = None
+        rec = self._containers[idx]
+        if rec.get("fading"):
+            return
 
-        eff = active["effect"]; anim = active["anim"]; w = active["widget"]
+        rec["fading"] = True
+        eff = rec["effect"]; anim = rec["anim"]; w = rec["widget"]
         anim.stop()
         eff.setOpacity(1.0)
         anim.setStartValue(1.0)
         anim.setEndValue(0.0)
 
         def _finished():
-            # remove leftmost
+            # remove the faded one
             w.hide()
             self._row_layout.removeWidget(w)
             try:
-                self._containers.pop(0)
+                self._containers.pop(idx)
+            except Exception:
+                pass
+
+            # append a new container using rotation
+            new_color = self._rot[self._next_idx]
+            new_cap = PackagingWorker.pick_capacity() if (self.worker and self.worker.isRunning()) else 0
+            new_rec = self._create_new_container(initial_cap=new_cap, color=new_color)
+            self._containers.append(new_rec)
+            self._row_layout.addWidget(new_rec["widget"])
+
+            # advance rotation
+            self._next_idx = (self._next_idx + 1) % 3
+
+            # refresh positions/visuals
+            for r in self._containers:
+                self._position_label(r)
+                self._position_badge(r)
+            self._apply_error_visuals()
+
+            # re-check front batch scheduling (front might be unaffected, but safe)
+            self._schedule_batch_for_front()
+
+        try:
+            anim.finished.disconnect()
+        except Exception:
+            pass
+        anim.finished.connect(_finished)
+        anim.start()
+
+
+    def _fade_and_remove_at_index(self, idx):
+        """Generic fade-out for any container at index idx (0..n-1)."""
+        if idx < 0 or idx >= len(self._containers):
+            return
+        rec = self._containers[idx]
+        w = rec["widget"]
+        eff = rec["effect"]
+        anim = rec["anim"]
+
+        # If this is the front, stop batch + selection, reset fade flags
+        if idx == 0:
+            self._batch_active = False
+            self._batch_remaining = 0
+            self._batch_color = None
+            if self._box_timer.isActive():
+                self._box_timer.stop()
+            self._selected_active = False
+            self._selected_expected = None
+            self._should_fade_current = False
+
+        # Mark fading and prep animation
+        rec["fading"] = True
+        try:
+            anim.stop()
+        except Exception:
+            pass
+        eff.setOpacity(1.0)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+
+        def _finished():
+            # remove widget and record
+            w.hide()
+            self._row_layout.removeWidget(w)
+            try:
+                self._containers.pop(idx)
             except Exception:
                 pass
 
@@ -496,8 +628,8 @@ class PackagingTask(BaseTask):
             # next rotation color
             self._next_idx = (self._next_idx + 1) % 3
 
-            # inform worker about new active container, including its color
-            if self.worker and self._containers:
+            # If we removed the front, inform worker about new active container
+            if idx == 0 and self.worker and self._containers:
                 leftmost = self._containers[0]
                 self.worker.begin_container(leftmost["capacity"], leftmost.get("color"))
                 try:
@@ -507,12 +639,13 @@ class PackagingTask(BaseTask):
                     )
                 except Exception:
                     pass
-
-            # refresh visuals
-            self._apply_error_visuals()
-
-            # schedule the exact batch for the new front
-            self._schedule_batch_for_front()
+                # refresh visuals
+                self._apply_error_visuals()
+                # Schedule the exact batch for the new front
+                self._schedule_batch_for_front()
+            else:
+                # For mid-line removals, just refresh visuals (front unchanged)
+                self._apply_error_visuals()
 
         try:
             anim.finished.disconnect()
@@ -567,6 +700,7 @@ class PackagingTask(BaseTask):
             "color": c,
             "mis_color": None,
             "batch_spawned": False,
+            "err_start": None,
         }
         self._position_label(rec)
         self._position_badge(rec)
@@ -584,6 +718,11 @@ class PackagingTask(BaseTask):
     def start(self, pace=None, error_rate=None):
         self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
+        # conveyor audio
+        try:
+            self.audio.start_conveyor()
+        except Exception:
+            pass
 
         if self._box_timer.isActive():
             self._box_timer.stop()
@@ -607,6 +746,7 @@ class PackagingTask(BaseTask):
             rec["capacity"] = PackagingWorker.pick_capacity()
             rec["error"] = False
             rec["fixed"] = False
+            rec["err_start"] = None
             rec["anim"].stop()
             rec["effect"].setOpacity(1.0)
             rec["widget"].show()
@@ -650,11 +790,18 @@ class PackagingTask(BaseTask):
         # Schedule the exact batch for the initial front
         self._schedule_batch_for_front()
 
+        # ensure alarm/audio clean slate
+        self._alarm_active = False
+        try:
+            self.audio.cancel_alarm_delay()
+            self.audio.stop_alarm()
+        except Exception:
+            pass
+
         try:
             get_logger().log_user("Packaging", "control", "start", f"pace={pace},error_rate={error_rate}")
         except Exception:
             pass
-
 
     def stop(self):
         self.conveyor.enable_motion(False)
@@ -677,6 +824,15 @@ class PackagingTask(BaseTask):
         self._batch_active = False
         self._batch_remaining = 0
         self._batch_color = None
+
+        # stop audios
+        try:
+            self.audio.stop_conveyor()
+            self.audio.stop_alarm()
+            self.audio.cancel_alarm_delay()
+        except Exception:
+            pass
+        self._alarm_active = False
 
         sh, el = self._pose_home()
         self._set_arm(sh, el)
@@ -746,6 +902,11 @@ class PackagingTask(BaseTask):
                 self._start_seg(self._pose_pick(), 120)
 
             elif self._pick_state == "descend":
+                # play robotic arm sound as it reaches the box
+                try:
+                    self.audio.play_robotic_arm()
+                except Exception:
+                    pass
                 c = self._color_of_box_in_window()
                 if c is not None:
                     self.arm.held_box_color = c
@@ -819,12 +980,13 @@ class PackagingTask(BaseTask):
     # ---------- Error smart-fix (click to pick, click to place — one attempt) ----------
     def _smart_fix_pick_or_place(self, clicked_rec):
         """
-        Like SortingTask, but user gets only ONE attempt:
+        One-attempt fix flow:
           - Click front (if errored) to pick.
           - Click ANY container to place:
               - If target color == expected -> move 1 from front to target; clear error.
-              - Else -> still move 1 out of front, error is consumed, and lead returns to normal.
-          - NEW: if front is fading but has error, allow user to fix -> stops fade immediately.
+              - Else -> still move 1 out of front, error is consumed.
+          - if front is fading but has error and user clicks it, cancel fade.
+          - if a non-front container becomes full due to the drop, fade it immediately.
         """
         if not self._containers:
             return
@@ -836,28 +998,28 @@ class PackagingTask(BaseTask):
             return
         front = self._containers[0]
 
-        # NEW: cancel fade if user tries to fix fading+errored front
+        # Cancel fading if user is starting to fix an errored, fading front
         if idx_clicked == 0 and front.get("fading") and front.get("error"):
             front["fading"] = False
             self._should_fade_current = False
-            eff = front["effect"]
-            anim = front["anim"]
+            eff = front["effect"]; anim = front["anim"]
             anim.stop()
             eff.setOpacity(1.0)
             try:
                 get_logger().log_user("Packaging", "container_front", "cancel_fade", "error fix started")
             except Exception:
                 pass
-            # allow continuing into normal "click to pick" flow
+            # continue into normal pick flow
 
-        # 1) If no selection yet: clicking front with an error -> pick it
+        # 1) If no selection yet: click front (if errored) to pick it
         if not self._selected_active:
             if idx_clicked == 0 and front.get("error"):
                 self._selected_active = True
                 self._selected_expected = front.get("mis_color")
                 self._apply_error_visuals()  # amber border on front
                 try:
-                    get_logger().log_user("Packaging", "container_front", "pick", f"needs={self._selected_expected}")
+                    get_logger().log_user("Packaging", "container_front", "pick",
+                                          f"needs={self._selected_expected}")
                 except Exception:
                     pass
             else:
@@ -870,7 +1032,6 @@ class PackagingTask(BaseTask):
         # 2) Selection active: clicking ANY container attempts a drop
         target_color = clicked_rec.get("color")
         expected = self._selected_expected
-
         if expected is None:
             self._selected_active = False
             self._apply_error_visuals()
@@ -890,6 +1051,10 @@ class PackagingTask(BaseTask):
             front["mis_color"] = None
             self._mark_fixed_visual(front)
             try:
+                self.audio.play_correct()   # play correct chime on user correction
+            except Exception:
+                pass
+            try:
                 get_logger().log_user("Packaging", f"container_{target_color}", "drop", "resolved")
             except Exception:
                 pass
@@ -899,11 +1064,19 @@ class PackagingTask(BaseTask):
             front["fixed"] = False
             front["mis_color"] = None
             try:
-                get_logger().log_user("Packaging", f"container_{target_color}", "drop", f"incorrect placement (error consumed)")
+                get_logger().log_user("Packaging", f"container_{target_color}", "drop",
+                                      "incorrect placement (error consumed)")
             except Exception:
                 pass
 
-        # Reset selection and visuals
+        # NEW: If a non-front container filled due to this drop, fade it right away
+        if idx_clicked != 0:
+            cap = int(clicked_rec.get("capacity", 0))
+            cnt = int(clicked_rec.get("count", 0))
+            if cap > 0 and cnt >= cap and not clicked_rec.get("fading"):
+                self._begin_fade_and_shift_other(idx_clicked)
+
+        # Reset selection/visuals
         self._selected_active = False
         self._selected_expected = None
         self._apply_error_visuals()
