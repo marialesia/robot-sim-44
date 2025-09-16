@@ -723,7 +723,7 @@ class SortingTask(BaseTask):
             get_logger().log_user("Sorting", f"container_{slot}", "pick",
                                   f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
 
-            # Removed self.audio.play_correct() here (no sound on pick)
+            # No chime here (only when actually resolved)
 
             # Update flashing/badges immediately (selected bin stops flashing)
             self._apply_flash_colors()
@@ -750,55 +750,63 @@ class SortingTask(BaseTask):
             pass
 
         rec['current'] = new_slot
-
-        # Add a count to total corrections
         self._total_corrections += 1
-        if new_slot == rec['actual']:
-            # Correct placement — resolve the error
-            self._correct_corrections += 1
 
-            # --- RECORD COMPLETION TIME ---
+        if new_slot == rec['actual']:
+            # Correct placement — resolve error
+            self._correct_corrections += 1
             import time
-            start_time = self._error_start_times.pop(eid, None)
-            if start_time is not None:
-                elapsed = time.time() - start_time
+            self._error_start_times.pop(eid, None)
 
             print(f"Sorting Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
             get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
                                   f"resolved eid={eid}, color={rec['color']}")
 
+            # Remove from error lists
             try:
                 if eid in self._bin_errors.get(new_slot, []):
                     self._bin_errors[new_slot].remove(eid)
             except ValueError:
                 pass
-
             del self._errors[eid]
-            self._selected_error = None
 
-            # Play correct chime ONLY here
+            # Play correct chime
             self.audio.play_correct()
-
-            # --- Stop alarm only when ALL errors are cleared ---
-            try:
-                no_errors_left = not self._errors
-                if not no_errors_left:
-                    no_errors_left = all(len(v) == 0 for v in self._bin_errors.values())
-                if no_errors_left:
-                    self.audio.stop_alarm()
-            except Exception:
-                pass
         else:
-            # Still wrong: place into this bin and keep “holding” it
-            self._bin_errors[new_slot].append(eid)
-            self._selected_error = eid
-            self._highlight_bin(new_slot, True)
-            print(f"Sorting Task: Moved error #{eid} onto {new_slot} (needs {rec['actual']}). Click again to fix.")
+            # Wrong placement — treat as permanently failed, clear the error too
+            import time
+            self._error_start_times.pop(eid, None)
+
+            print(f"Sorting Task: Error #{eid} placed incorrectly in {new_slot} and cleared (was {rec['actual']})")
             get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
-                                  f"still wrong eid={eid}, needs={rec['actual']}")
+                                  f"final incorrect eid={eid}, expected={rec['actual']}")
+
+            # Remove error record completely
+            try:
+                if eid in self._bin_errors.get(new_slot, []):
+                    self._bin_errors[new_slot].remove(eid)
+            except ValueError:
+                pass
+            if eid in self._errors:
+                del self._errors[eid]
+
+            # 🔔 Play incorrect chime here
+            self.audio.play_incorrect()
+
+        # In either case, deselect after the drop
+        self._selected_error = None
+
+        # Stop alarm if no errors remain
+        try:
+            no_errors_left = not self._errors or all(len(v) == 0 for v in self._bin_errors.values())
+            if no_errors_left:
+                self.audio.stop_alarm()
+        except Exception:
+            pass
 
         # Refresh flashing + badges
         self._apply_flash_colors()
+
 
     # ===== Worker signal handlers =====
     def _on_box_spawned(self, box_data):
