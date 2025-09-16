@@ -1,4 +1,3 @@
-# tasks/packaging_task.py
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation
 from PyQt5.QtWidgets import QLabel, QGraphicsOpacityEffect, QHBoxLayout, QSizePolicy, QWidget
@@ -6,7 +5,6 @@ from .base_task import BaseTask, StorageContainerWidget
 from .packaging_logic import PackagingWorker
 from event_logger import get_logger
 import random
-
 
 class PackagingTask(BaseTask):
     def __init__(self):
@@ -20,10 +18,22 @@ class PackagingTask(BaseTask):
 
         # ---- Style for packaging containers ----
         def _style_container(w):
-            w.border = QColor("#c76a1a")
-            w.fill_top = QColor("#ffe9d3")
-            w.fill_bottom = QColor("#ffd9b5")
-            w.rib = QColor(199, 106, 26, 110)
+            c = random.choice(["red", "blue", "green"])
+            if c == "red":
+                w.border = QColor("#8c1f15")
+                w.fill_top = QColor("#ffd6d1")
+                w.fill_bottom = QColor("#ffb8b0")
+                w.rib = QColor(140, 31, 21, 110)
+            elif c == "blue":
+                w.border = QColor("#2b4a91")
+                w.fill_top = QColor("#dbe8ff")
+                w.fill_bottom = QColor("#c7daff")
+                w.rib = QColor(43, 74, 145, 110)
+            else:  # green
+                w.border = QColor("#1f7a3a")
+                w.fill_top = QColor("#d9f7e6")
+                w.fill_bottom = QColor("#bff0d3")
+                w.rib = QColor(31, 122, 58, 110)
 
         _style_container(self.container)  # use BaseTask's default as the first
 
@@ -46,10 +56,9 @@ class PackagingTask(BaseTask):
         self._row_layout.setContentsMargins(0, 0, 0, 0)
         self._row_layout.setSpacing(12)
 
-        # Container records
+        # Build container records list
         self._containers = []
 
-        # Helper to create badge
         def _make_badge(parent_w):
             b = QLabel("!", parent_w)
             b.setFixedSize(20, 20)
@@ -58,13 +67,14 @@ class PackagingTask(BaseTask):
             b.hide()
             return b
 
-        # Helper to create new container record
         def _new_container(widget=None):
             w = widget or StorageContainerWidget()
             _style_container(w)
             w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
-            cap, cnt = 0, 0
+            cap = 0
+            cnt = 0
+
             lbl = QLabel(w)
             lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
             lbl.setStyleSheet(
@@ -77,12 +87,14 @@ class PackagingTask(BaseTask):
             lbl.show()
 
             badge = _make_badge(w)
+
             eff = QGraphicsOpacityEffect(w)
             w.setGraphicsEffect(eff)
             eff.setOpacity(1.0)
 
             anim = QPropertyAnimation(eff, b"opacity", self)
             anim.setDuration(2000)
+
             w.installEventFilter(self)
 
             rec = {
@@ -104,6 +116,7 @@ class PackagingTask(BaseTask):
         first_rec = _new_container(self.container)
         self._containers.append(first_rec)
         self._row_layout.addWidget(first_rec["widget"])
+
         for _ in range(3):
             rec = _new_container()
             self._containers.append(rec)
@@ -111,11 +124,11 @@ class PackagingTask(BaseTask):
 
         self.grid.addWidget(self._row, 1, 0, 1, 2, Qt.AlignRight | Qt.AlignBottom)
 
-        # ===== Worker & timers =====
+        # ===== Spawner / worker =====
         self.worker = None
         self._box_timer = QTimer(self)
-        self._box_timer.timeout.connect(self._spawn_orange_box)
 
+        # ===== Minimal arm 'pick-present-return' cycle =====
         self._pick_timer = QTimer(self)
         self._pick_timer.setInterval(16)
         self._pick_timer.timeout.connect(self._tick_pick)
@@ -181,8 +194,11 @@ class PackagingTask(BaseTask):
                 w.update()
                 if badge:
                     badge.setStyleSheet(
-                        "color: white; background: #e74c3c; border: 2px solid #b03a2e;"
-                        "border-radius: 10px; font-weight: 800; font-size: 12px;"
+                        "color: white;"
+                        "background: #e74c3c;"
+                        "border: 2px solid #b03a2e;"
+                        "border-radius: 10px;"
+                        "font-weight: 800; font-size: 12px;"
                     )
                     badge.show()
                     self._position_badge(rec)
@@ -196,7 +212,7 @@ class PackagingTask(BaseTask):
         self._flash_on = not self._flash_on
         self._apply_error_visuals()
 
-    # ---------- Worker callback ----------
+    # ---------- Worker callbacks ----------
     def _on_worker_fade(self, mode, at_count, capacity, secs):
         self._should_fade_current = True
         if self._containers:
@@ -205,40 +221,41 @@ class PackagingTask(BaseTask):
             rec["fixed"] = False
             try:
                 get_logger().log_robot(
-                    "Packaging", f"fade_trigger mode={mode} at {at_count}/{capacity} ({secs:.2f}s)"
+                    "Packaging",
+                    f"fade_trigger mode={mode} at {at_count}/{capacity} ({secs:.2f}s)"
                 )
             except Exception:
                 pass
             self._apply_error_visuals()
 
-    # ---------- Packing ----------
+    # ---------- Packing count ----------
     def _on_item_packed(self):
         if not self._containers:
             return
         active = self._containers[0]
         if active["fading"]:
             return
-
         active["count"] += 1
         self._update_label(active)
-        print(f"Packaging Task: Packed {active['count']}/{active['capacity']}")
+        msg = f"Packaging Task: Packed {active['count']}/{active['capacity']}"
+        print(msg)
         try:
             get_logger().log_robot("Packaging", f"pack {active['count']}/{active['capacity']}")
         except Exception:
             pass
-
         if self.worker:
             self.worker.record_pack()
-
         need_fade = self._should_fade_current
         if not self.worker:
             need_fade = need_fade or (active["count"] >= active["capacity"])
-
         if need_fade and not active["fading"]:
             active["fading"] = True
             self._should_fade_current = False
-            w = active["widget"]
-
+            eff = active["effect"]; anim = active["anim"]; w = active["widget"]
+            anim.stop()
+            eff.setOpacity(1.0)
+            anim.setStartValue(1.0)
+            anim.setEndValue(0.0)
             def _finished():
                 w.hide()
                 self._row_layout.removeWidget(w)
@@ -246,53 +263,71 @@ class PackagingTask(BaseTask):
                     self._containers.pop(0)
                 except Exception:
                     pass
-
                 if self.worker and self.worker.isRunning():
                     new_cap = PackagingWorker.pick_capacity()
                     new_rec = self._create_new_container(initial_cap=new_cap)
                 else:
                     new_rec = self._create_new_container(initial_cap=None)
-
                 self._containers.append(new_rec)
                 self._row_layout.addWidget(new_rec["widget"])
                 for rec2 in self._containers:
                     self._position_label(rec2)
                     self._position_badge(rec2)
-
                 if self.worker and self._containers:
                     leftmost = self._containers[0]
                     self.worker.begin_container(leftmost["capacity"])
                     try:
-                        get_logger().log_robot("Packaging", f"begin_container capacity={leftmost['capacity']}")
+                        get_logger().log_robot(
+                            "Packaging",
+                            f"begin_container capacity={leftmost['capacity']}"
+                        )
                     except Exception:
                         pass
-
                 self._apply_error_visuals()
                 try:
-                    get_logger().log_robot("Packaging", f"shift_completed new_right_capacity={new_rec['capacity']}")
+                    get_logger().log_robot(
+                        "Packaging",
+                        f"shift_completed new_right_capacity={new_rec['capacity']}"
+                    )
                 except Exception:
                     pass
-
-                # NEW: after 2s, launch sliding departing box
-                QTimer.singleShot(2000, lambda: self._launch_departing_box(active))
-
-            _finished()
+            try:
+                anim.finished.disconnect()
+            except Exception:
+                pass
+            anim.finished.connect(_finished)
+            anim.start()
 
     def _create_new_container(self, initial_cap=None):
         w = StorageContainerWidget()
-        w.border = QColor("#c76a1a")
-        w.fill_top = QColor("#ffe9d3")
-        w.fill_bottom = QColor("#ffd9b5")
-        w.rib = QColor(199, 106, 26, 110)
+        c = random.choice(["red", "blue", "green"])
+        if c == "red":
+            w.border = QColor("#8c1f15")
+            w.fill_top = QColor("#ffd6d1")
+            w.fill_bottom = QColor("#ffb8b0")
+            w.rib = QColor(140, 31, 21, 110)
+        elif c == "blue":
+            w.border = QColor("#2b4a91")
+            w.fill_top = QColor("#dbe8ff")
+            w.fill_bottom = QColor("#c7daff")
+            w.rib = QColor(43, 74, 145, 110)
+        else:  # green
+            w.border = QColor("#1f7a3a")
+            w.fill_top = QColor("#d9f7e6")
+            w.fill_bottom = QColor("#bff0d3")
+            w.rib = QColor(31, 122, 58, 110)
+
         w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
         cap = 0 if initial_cap is None else int(initial_cap)
         cnt = 0
+
         lbl = QLabel(w)
         lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         lbl.setStyleSheet(
             "font-weight: 700; font-size: 18px; color: #222;"
-            "background: rgba(255,255,255,200); padding: 2px 8px; border-radius: 8px;"
+            "background: rgba(255,255,255,200);"
+            "padding: 2px 8px; border-radius: 8px;"
             "border: 1px solid rgba(0,0,0,60);"
         )
         lbl.setText(f"{cnt}/{cap}")
@@ -307,8 +342,10 @@ class PackagingTask(BaseTask):
         eff = QGraphicsOpacityEffect(w)
         w.setGraphicsEffect(eff)
         eff.setOpacity(1.0)
+
         anim = QPropertyAnimation(eff, b"opacity", self)
         anim.setDuration(2000)
+
         w.installEventFilter(self)
 
         rec = {
@@ -328,44 +365,9 @@ class PackagingTask(BaseTask):
         self._position_badge(rec)
         return rec
 
-    # ---------- Departing box ----------
-    def _launch_departing_box(self, rec):
-        """Spawn a temporary departing container (styled like the real one, but no counter) and slide it left."""
-        w = rec["widget"]
-
-        # Create a clone StorageContainerWidget
-        clone = StorageContainerWidget(self)
-        clone.resize(w.size())
-        clone.move(w.mapTo(self, w.rect().topLeft()))
-
-        # Copy container style
-        clone.border = w.border
-        clone.fill_top = w.fill_top
-        clone.fill_bottom = w.fill_bottom
-        clone.rib = w.rib
-
-        clone.show()
-
-        # Timer-driven slide animation
-        def step():
-            x, y = clone.pos().x(), clone.pos().y()
-            if x + clone.width() < 0:  # fully off-screen
-                clone.deleteLater()
-                slide_timer.stop()
-            else:
-                clone.move(x - 5, y)  # move left
-
-        slide_timer = QTimer(self)
-        slide_timer.timeout.connect(step)
-        slide_timer.start(16)  # ~60 FPS
-
-
     # ---------- Spawning ----------
-    def _spawn_orange_box(self):
-        self.conveyor.spawn_box(color="orange")
-
     def spawn_box_from_worker(self, box_data):
-        color = box_data.get("color", "orange")
+        color = box_data.get("color") or random.choice(["red", "blue", "green"])
         try:
             get_logger().log_robot("Packaging", f"spawn_box color={color}")
         except Exception:
@@ -376,10 +378,12 @@ class PackagingTask(BaseTask):
     def start(self, pace=None, error_rate=None):
         self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
+
         if self._box_timer.isActive():
             self._box_timer.stop()
+
         if not self.worker or not self.worker.isRunning():
-            self.worker = PackagingWorker(pace=pace, color="orange", error_rate=error_rate)
+            self.worker = PackagingWorker(pace=pace, error_rate=error_rate)
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.metrics_ready.connect(self._on_metrics)
             self.worker.container_should_fade.connect(self._on_worker_fade)
@@ -422,7 +426,7 @@ class PackagingTask(BaseTask):
             self._pick_timer.start()
 
         try:
-            get_logger().log_user("Packaging", "control", "start", "pace=slow,error_rate=0.20")
+            get_logger().log_user("Packaging", "control", "start", f"pace={pace},error_rate={error_rate}")
         except Exception:
             pass
 
@@ -432,16 +436,20 @@ class PackagingTask(BaseTask):
             self._box_timer.stop()
         if self._pick_timer.isActive():
             self._pick_timer.stop()
+
         if hasattr(self, "worker") and self.worker and self.worker.isRunning():
             self.worker.stop()
             self.worker.wait(500)
+
         if self._flash_timer.isActive():
             self._flash_timer.stop()
         self._flash_on = False
+
         sh, el = self._pose_home()
         self._set_arm(sh, el)
         self.arm.held_box_visible = False
         self.arm.update()
+
         try:
             get_logger().log_user("Packaging", "control", "stop", "stopped by user")
         except Exception:
@@ -488,6 +496,7 @@ class PackagingTask(BaseTask):
 
     def _tick_pick(self):
         self._now_ms += self._pick_timer.interval()
+
         if self._pick_state == "idle":
             if self._box_near_grip() and (self._now_ms - self._last_touch_time_ms) >= self._touch_cooldown_ms:
                 self._last_touch_time_ms = self._now_ms
@@ -511,6 +520,7 @@ class PackagingTask(BaseTask):
             if self._pick_state == "to_prep":
                 self._pick_state = "descend"
                 self._start_seg(self._pose_pick(), 120)
+
             elif self._pick_state == "descend":
                 c = self._color_of_box_in_window()
                 if c is not None:
@@ -519,21 +529,26 @@ class PackagingTask(BaseTask):
                     self.arm.update()
                 self._pick_state = "hold"
                 self._start_seg(self._pose_pick(), 40)
+
             elif self._pick_state == "hold":
                 self._pick_state = "lift"
                 self._start_seg(self._pose_lift(), 120)
+
             elif self._pick_state == "lift":
                 self._pick_state = "present"
                 self._start_seg(self._pose_present(), 200)
+
             elif self._pick_state == "present":
                 self._on_item_packed()
                 self._pick_state = "return"
                 self.arm.held_box_visible = False
                 self.arm.update()
                 self._start_seg(self._pose_home(), 200)
+
             elif self._pick_state == "return":
                 self._pick_state = "idle_pause"
                 self._start_seg(self._pose_home(), 40)
+
             elif self._pick_state == "idle_pause":
                 self._pick_state = "idle"
 
@@ -559,11 +574,13 @@ class PackagingTask(BaseTask):
         colors = getattr(self.conveyor, "_box_colors", None)
         detect_x = self._grip_x()
         cutoff_x = detect_x + self._despawn_offset_px
+
         hit_index = -1
         for i, x in enumerate(boxes):
             if x >= cutoff_x:
                 hit_index = i
                 break
+
         if hit_index != -1:
             del boxes[hit_index]
             if isinstance(colors, list) and hit_index < len(colors):
@@ -591,19 +608,23 @@ class PackagingTask(BaseTask):
             except Exception:
                 pass
             return
+
         cap = rec.get("capacity", 0)
         if cap > 0:
             rec["count"] = cap
             self._update_label(rec)
+
         rec["error"] = False
         rec["fixed"] = True
         self._mark_fixed_visual(rec)
         if rec.get("badge"):
             rec["badge"].hide()
+
         try:
             get_logger().log_user("Packaging", "container", "smart_fix", f"set to {cap}/{cap}")
         except Exception:
             pass
+
         self._apply_error_visuals()
 
     def _mark_fixed_visual(self, rec):
@@ -611,7 +632,7 @@ class PackagingTask(BaseTask):
         w.border = QColor("#2ecc71")
         w.update()
 
-    # ---------- Event filter ----------
+    # ---------- Keep labels centered + handle clicks ----------
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Resize:
             for rec in self._containers:
@@ -619,11 +640,13 @@ class PackagingTask(BaseTask):
                     self._position_label(rec)
                     self._position_badge(rec)
                     break
+
         if event.type() == QEvent.MouseButtonPress:
             for rec in self._containers:
                 if obj is rec["widget"]:
                     self._smart_fix(rec)
                     return True
+
         return super().eventFilter(obj, event)
 
     def _on_metrics_live(self, metrics):

@@ -1,4 +1,3 @@
-# tasks/packaging_logic.py
 import time, random
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -8,7 +7,7 @@ class PackagingWorker(QThread):
     Background 'brain' for the Packaging task.
 
     Responsibilities:
-    - Spawns boxes at a configurable pace (unchanged).
+    - Spawns boxes at a configurable pace.
     - Chooses per-container scenario based on error_rate:
         * normal   -> fade at capacity
         * underfill-> fade below capacity (e.g., 2/4)
@@ -18,18 +17,20 @@ class PackagingWorker(QThread):
     # Spawner side (already used by your PackagingTask)
     box_spawned = pyqtSignal(dict)     # {"color": <str>, "error": <bool>}
     metrics_ready = pyqtSignal(dict)   # {"total": int, "errors": int, "accuracy": float, "items_per_min": float}
-    metrics_live = pyqtSignal(dict)     # live updated metrics
+    metrics_live = pyqtSignal(dict)    # live updated metrics
 
     # New: UI should fade the active container NOW
     # args: mode ("normal"|"underfill"|"overfill"), count_at_trigger, capacity, seconds_elapsed
     container_should_fade = pyqtSignal(str, int, int, float)
 
-    def __init__(self, pace="slow", color="orange", error_rate=0.0):
+    def __init__(self, pace="slow", error_rate=0.0):
         super().__init__()
         self.pace = pace
-        self.color = color
         self.error_rate = float(error_rate)
         self.running = True
+
+        # pool of usable box colors
+        self.colors = ["red", "blue", "green"]
 
         # Items per second ranges
         self.pace_map = {
@@ -64,14 +65,12 @@ class PackagingWorker(QThread):
         while self.running:
             # Determine if current box is an error
             is_error = (random.random() < self.error_rate)
-            # self.total += 1
-            # if is_error:
-            #     self.errors += 1
-            # else:
-            #     self.correct += 1  # <-- increment correct boxes for metrics
 
-            # Emit box spawned signal
-            self.box_spawned.emit({"color": self.color, "error": is_error})
+            # Emit box spawned signal with random color
+            self.box_spawned.emit({
+                "color": random.choice(self.colors),
+                "error": is_error
+            })
 
             # Variable cadence for a more natural feel
             rate = max(1e-6, random.uniform(lo, hi))   # items per second
