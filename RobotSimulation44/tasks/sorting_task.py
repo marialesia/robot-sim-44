@@ -199,6 +199,29 @@ class SortingTask(BaseTask):
 
     # ===== Called by your existing GUI =====
     def start(self, pace=None, bin_count=None, error_rate=None):
+        # --- Show only the number of bins requested ---
+        all_containers = [
+            self.container_red,
+            self.container_blue,
+            self.container_green,
+            self.container_purple,
+            self.container_orange,
+            self.container_teal
+        ]
+
+        bin_count = bin_count or 6
+
+        # Show/hide containers
+        for i, w in enumerate(all_containers):
+            w.setVisible(i < bin_count)
+
+        # Update slot mapping so only visible bins can receive errors
+        slot_order = ["red", "blue", "green", "purple", "orange", "teal"]
+        self._slot_to_widget = {slot_order[i]: all_containers[i] for i in range(bin_count)}
+
+        # Reset per-bin error lists
+        self._bin_errors = {k: [] for k in self._slot_to_widget.keys()}
+
         # belt motion
         self.conveyor.setBeltSpeed(120)   # left -> right
         self.conveyor.enable_motion(True)
@@ -545,7 +568,7 @@ class SortingTask(BaseTask):
 
     # Pick a wrong bin (used when worker flags an incorrect sort)
     def _wrong_slot_for(self, slot):
-        candidates = ["red", "blue", "green", "purple", "orange", "teal"]
+        candidates = list(self._slot_to_widget.keys())
         try:
             candidates.remove(slot)
         except ValueError:
