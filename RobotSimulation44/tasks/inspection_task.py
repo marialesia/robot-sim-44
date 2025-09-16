@@ -6,6 +6,9 @@ from .base_task import BaseTask, StorageContainerWidget
 from .inspection_logic import InspectionWorker
 from event_logger import get_logger
 import random
+import time
+from audio_manager import AudioManager
+
 
 class InspectionTask(BaseTask):
     def __init__(self):
@@ -33,7 +36,7 @@ class InspectionTask(BaseTask):
         self.set_positions(
             conveyor=dict(row=0, col=0, colSpan=3, align=Qt.AlignTop),
             arm=dict(row=0, col=0, colSpan=3, align=Qt.AlignHCenter | Qt.AlignBottom),
-            container=dict(row=2, col=1, align=Qt.AlignHCenter | Qt.AlignVCenter),  # placeholder; real row is set above
+            container=dict(row=2, col=1, align=Qt.AlignHCenter | Qt.AlignVCenter),  # placeholder
             col_stretch=[1, 1, 1],
             row_stretch=[0, 0, 1],
             spacing=24
@@ -49,12 +52,11 @@ class InspectionTask(BaseTask):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(12)
 
-        # Put a fixed gap between the two containers so there is empty space in the middle
         self.container_green.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.container_red.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
         row_layout.addWidget(self.container_green)
-        row_layout.addSpacing(160)   # change this number to make the middle gap larger/smaller
+        row_layout.addSpacing(160)
         row_layout.addWidget(self.container_red)
 
         self.grid.addWidget(row, 3, 0, 1, 3, Qt.AlignHCenter | Qt.AlignTop)
@@ -68,7 +70,7 @@ class InspectionTask(BaseTask):
             w._slot = slot
             w.installEventFilter(self)
 
-        self._errors = {}                        # id -> {id,color,actual,current}
+        self._errors = {}
         self._bin_errors = {k: [] for k in self._slot_to_widget.keys()}
         self._next_eid = 1
         self._selected_error = None
@@ -101,7 +103,7 @@ class InspectionTask(BaseTask):
 
         # ===== Arm "touch a box" animation =====
         self._pick_timer = QTimer(self)
-        self._pick_timer.setInterval(16)  # ~60 FPS
+        self._pick_timer.setInterval(16)
         self._pick_timer.timeout.connect(self._tick_pick)
 
         # FSM state
@@ -126,21 +128,23 @@ class InspectionTask(BaseTask):
         self._pending_color = None
 
         # For Reaction time
-        self._error_start_times = {} 
-        # For Sorting correction accuracy
+        self._error_start_times = {}
+        # For correction accuracy
         self._total_corrections = 0
         self._correct_corrections = 0
 
         # Worker
         self.worker = None
 
+        # ---- Audio ----
+        self.audio = AudioManager()
+        self._alarm_active = False
+
     # ===== Controls =====
     def start(self, pace=None, error_rate=None, error_rate_percent=None):
-        # belt motion
         self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
 
-        # reset state
         self._now_ms = 0
         self._last_touch_time_ms = -10000
         self._pick_state = "idle"
@@ -157,7 +161,6 @@ class InspectionTask(BaseTask):
         if not self._flash_timer.isActive():
             self._flash_timer.start()
 
-        # start worker
         if self.worker is None:
             self.worker = InspectionWorker(
                 pace=pace,
@@ -172,6 +175,9 @@ class InspectionTask(BaseTask):
             self.worker.running = True
             if not self.worker.isRunning():
                 self.worker.start()
+        
+        # Playing conveyor sound
+        self.audio.start_conveyor()
 
     def pause(self):
         self.conveyor.enable_motion(False)
@@ -182,31 +188,29 @@ class InspectionTask(BaseTask):
         if self._flash_timer.isActive():
             self._flash_timer.stop()
 
-        # reset borders and hide badges
+        self.audio.stop_alarm()
+        self.audio.stop_conveyor()
+
         for slot, w in self._slot_to_widget.items():
             w.border = self._orig_borders.get(slot, w.border)
             w.update()
         for b in self._badges.values():
             b.hide()
 
-        # home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
         self.arm.held_box_visible = False
         self.arm.update()
 
-        # selection cleanup
         if self._selected_error is not None:
             for slot in self._slot_to_widget.keys():
                 self._highlight_bin(slot, False)
             self._selected_error = None
 
-        # pause worker
         if self.worker and self.worker.isRunning():
             self.worker.pause()
 
     def stop(self):
-        # stop motions
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
             self._box_timer.stop()
@@ -215,40 +219,34 @@ class InspectionTask(BaseTask):
         if self._flash_timer.isActive():
             self._flash_timer.stop()
 
-        # clear belt
+        self.audio.stop_alarm()
+        self.audio.stop_conveyor()
+
         if hasattr(self.conveyor, "_boxes"):
             self.conveyor._boxes.clear()
         if hasattr(self.conveyor, "_box_colors"):
             self.conveyor._box_colors.clear()
         self.conveyor.update()
 
-        # reset borders and badges
         for slot, w in self._slot_to_widget.items():
             w.border = self._orig_borders.get(slot, w.border)
             w.update()
         for b in self._badges.values():
             b.hide()
 
-        # home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
         self.arm.held_box_visible = False
         self.arm.update()
 
-        # selection cleanup
         if self._selected_error is not None:
             for slot in self._slot_to_widget.keys():
                 self._highlight_bin(slot, False)
             self._selected_error = None
 
-        # stop worker
         if self.worker and self.worker.isRunning():
             self.worker.stop()
             self.worker = None
-
-        # reset metrics (optional)
-        # if hasattr(self, "metrics_manager"):
-        #     self.metrics_manager.reset_metrics()
 
     # ---------- Arm path ----------
     def _pose_home(self):
@@ -264,7 +262,6 @@ class InspectionTask(BaseTask):
         return (-93.0, -10.0)
 
     def _pose_present(self, slot):
-        # Two directions only: left = green, right = red
         poses = {
             "green": (-220.0, -10.0),
             "red":   (40.0,  10.0),
@@ -283,23 +280,18 @@ class InspectionTask(BaseTask):
         self._pick_t = 0
 
     def _tick_pick(self):
-        # global time
         self._now_ms += self._pick_timer.interval()
 
         if self._pick_state == "idle":
             if self._box_near_grip() and (self._now_ms - self._last_touch_time_ms) >= self._touch_cooldown_ms:
                 self._last_touch_time_ms = self._now_ms
-
-                # lock color & slot
                 self._pending_color = self._color_of_box_in_window()
                 self._target_slot = self._color_to_slot(self._pending_color) if self._pending_color else None
-
                 self._pick_state = "to_prep"
                 self._start_seg(self._pose_prep(), 120)
             else:
                 return
 
-        # interpolate
         self._pick_t += self._pick_timer.interval()
         t = min(1.0, self._pick_t / float(self._pick_duration))
         s0, e0 = self._pick_from
@@ -308,26 +300,23 @@ class InspectionTask(BaseTask):
         e = e0 + (e1 - e0) * t
         self._set_arm(s, e)
 
-        # despawn while interacting
         if self._pick_state in ("hold", "lift"):
             self._despawn_if_past_cutoff()
 
-        # state transitions
         if t >= 1.0:
             if self._pick_state == "to_prep":
                 self._pick_state = "descend"
                 self._start_seg(self._pose_pick(), 120)
 
             elif self._pick_state == "descend":
-                # trigger inspection decision right at pick
                 nearest_color = self._color_of_box_in_window()
                 if nearest_color and self.worker:
                     hex_color = nearest_color.name() if hasattr(nearest_color, "name") else nearest_color
-                    COLOR_MAP = {
-                        "#c82828": "red",
-                        "#1f7a3a": "green",
-                    }
+                    COLOR_MAP = {"#c82828": "red", "#1f7a3a": "green"}
                     self.worker.sort_box(COLOR_MAP.get(hex_color, "green"))
+
+                # play robotic arm audio
+                self.audio.play_robotic_arm()
 
                 self._pick_state = "hold"
                 c = self._color_of_box_in_window() or self._pending_color
@@ -404,7 +393,7 @@ class InspectionTask(BaseTask):
 
     def _color_of_box_in_window(self):
         boxes = getattr(self.conveyor, "_boxes", None)
-        cols  = getattr(self.conveyor, "_box_colors", None)
+        cols = getattr(self.conveyor, "_box_colors", None)
         if not boxes or not cols:
             return None
         grip_x = self._grip_x()
@@ -426,7 +415,7 @@ class InspectionTask(BaseTask):
             return "green"
         return "green"
 
-    # ===== Click handling / event filter (same UX as sorting) =====
+    # ===== Click handling =====
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress:
             slot = getattr(obj, "_slot", None)
@@ -511,6 +500,21 @@ class InspectionTask(BaseTask):
                 if badge:
                     badge.hide()
 
+        # Alarm control
+        if self._errors and not self._alarm_active:
+            # wait until 2s old error
+            oldest_age = 0.0
+            for eid, start in self._error_start_times.items():
+                age = time.time() - start
+                if age > oldest_age:
+                    oldest_age = age
+            if oldest_age >= 2.0:
+                self.audio.start_alarm()
+                self._alarm_active = True
+        elif not self._errors and self._alarm_active:
+            self.audio.stop_alarm()
+            self._alarm_active = False
+
     def _flash_tick(self):
         self._flash_on = not self._flash_on
         self._apply_flash_colors()
@@ -518,7 +522,6 @@ class InspectionTask(BaseTask):
     def _on_container_clicked(self, slot):
         get_logger().log_user("Inspection", f"container_{slot}", "click", "container clicked")
 
-        # === CASE 1: Not holding anything, attempt to PICK from this bin ===
         if self._selected_error is None:
             ids = self._bin_errors.get(slot, [])
             if not ids:
@@ -542,7 +545,6 @@ class InspectionTask(BaseTask):
             self._apply_flash_colors()
             return
 
-        # === CASE 2: Holding an error, drop it into clicked bin (only one attempt allowed) ===
         eid = self._selected_error
         rec = self._errors.get(eid)
         if not rec:
@@ -550,7 +552,6 @@ class InspectionTask(BaseTask):
             self._apply_flash_colors()
             return
 
-        # Remove highlight from previous bin
         self._highlight_bin(rec['current'], False)
         prev = rec['current']
         new_slot = slot
@@ -565,15 +566,12 @@ class InspectionTask(BaseTask):
         self._total_corrections += 1
 
         if new_slot == rec['actual']:
-            # Correct placement — resolve error
             self._correct_corrections += 1
-            import time
             self._error_start_times.pop(eid, None)
 
             print(f"Inspection Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
             get_logger().log_user("Inspection", f"container_{new_slot}", "drop",
                                   f"resolved eid={eid}, color={rec['color']}")
-
             try:
                 if eid in self._bin_errors.get(new_slot, []):
                     self._bin_errors[new_slot].remove(eid)
@@ -582,9 +580,13 @@ class InspectionTask(BaseTask):
             if eid in self._errors:
                 del self._errors[eid]
 
+            self.audio.play_correct()
+
+            if not self._errors and self._alarm_active:
+                self.audio.stop_alarm()
+                self._alarm_active = False
+
         else:
-            # Wrong placement — still clear the error
-            import time
             self._error_start_times.pop(eid, None)
 
             print(f"Inspection Task: Error #{eid} placed incorrectly in {new_slot} and cleared (was {rec['actual']})")
@@ -599,22 +601,18 @@ class InspectionTask(BaseTask):
             if eid in self._errors:
                 del self._errors[eid]
 
-        # In all cases, deselect after the first drop (no second chance)
+            self.audio.play_incorrect()
+
         self._selected_error = None
-
-        # Refresh flashing/badges
         self._apply_flash_colors()
-
 
     # ===== Worker signal handlers =====
     def spawn_box_from_worker(self, box_data):
-        """Called when worker wants to spawn a box."""
-        color = box_data["color"]     # "green" | "red"
-        error = box_data["error"]     # currently unused on-spawn
+        color = box_data["color"]
+        error = box_data["error"]
         self.conveyor.spawn_box(color=color, error=error)
 
     def _on_box_sorted(self, color, correct):
-        """Worker decides if this pick is correct or an error."""
         assert color in {"green", "red"}
 
         if correct:
@@ -623,23 +621,26 @@ class InspectionTask(BaseTask):
             msg = f"Inspection Task: sorted {color} into {into} - correct"
             print(msg)
             get_logger().log_robot("Inspection", msg)
+            self.audio.play_correct()
+
         else:
             wrong = "red" if color == "green" else "green"
             self._present_slot_override = wrong
             into = wrong
 
-            # create an error record living in the wrong bin
             eid = self._next_eid
             self._next_eid += 1
             rec = {"id": eid, "color": color, "actual": color, "current": into}
             self._errors[eid] = rec
             self._bin_errors[into].append(eid)
+            self._error_start_times[eid] = time.time()
 
             msg = f"Inspection Task: sorted {color} into {into} - error (expected {color})"
             print(msg)
             get_logger().log_robot("Inspection", msg)
 
-            # Update flashing/badges immediately
+            self.audio.play_incorrect()
+
             self._apply_flash_colors()
 
     def _on_metrics_live(self, metrics):
@@ -648,7 +649,6 @@ class InspectionTask(BaseTask):
                 metrics['insp_correction_rate'] = (self._correct_corrections / self._total_corrections) * 100
             else:
                 metrics['insp_correction_rate'] = 0.0
-            
             self.metrics_manager.update_metrics(metrics)
         else:
             print("Inspection live metrics:", metrics)
