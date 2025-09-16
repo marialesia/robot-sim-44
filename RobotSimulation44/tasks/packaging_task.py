@@ -1,10 +1,12 @@
+# tasks/packaging_task.py
 from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation, QPoint
+from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation
 from PyQt5.QtWidgets import QLabel, QGraphicsOpacityEffect, QHBoxLayout, QSizePolicy, QWidget
 from .base_task import BaseTask, StorageContainerWidget
 from .packaging_logic import PackagingWorker
 from event_logger import get_logger
 import random
+
 
 class PackagingTask(BaseTask):
     def __init__(self):
@@ -16,15 +18,18 @@ class PackagingTask(BaseTask):
         self.arm.c_arm = QColor("#8e44ad")
         self.arm.c_arm_dark = QColor("#6d2e8a")
 
-        # ---- Style for packaging containers ----
-        def _style_container(w):
-            c = random.choice(["red", "blue", "green"])
-            if c == "red":
+        # ---- Color rotation (always keep R, B, G visible) ----
+        self._rot = ["red", "blue", "green"]
+        self._next_idx = random.randint(0, 2)   # start point for rotation
+
+        # ---- helpers ----
+        def _apply_style_by_color(w, color: str):
+            if color == "red":
                 w.border = QColor("#8c1f15")
                 w.fill_top = QColor("#ffd6d1")
                 w.fill_bottom = QColor("#ffb8b0")
                 w.rib = QColor(140, 31, 21, 110)
-            elif c == "blue":
+            elif color == "blue":
                 w.border = QColor("#2b4a91")
                 w.fill_top = QColor("#dbe8ff")
                 w.fill_bottom = QColor("#c7daff")
@@ -35,28 +40,30 @@ class PackagingTask(BaseTask):
                 w.fill_bottom = QColor("#bff0d3")
                 w.rib = QColor(31, 122, 58, 110)
 
-        _style_container(self.container)  # style the BaseTask's default as the first
+        self._apply_style_by_color = _apply_style_by_color
 
-        # ---- Layout: keep conveyor + arm; replace single container with a row of 4 ----
+        # Style the BaseTask's default container to match first color in rotation
+        first_color = self._rot[self._next_idx]
+        self._apply_style_by_color(self.container, first_color)
+
+        # ---- Layout ----
         self.set_positions(
             conveyor=dict(row=0, col=0, colSpan=2, align=Qt.AlignTop),
             arm=dict(row=0, col=0, colSpan=2, align=Qt.AlignHCenter | Qt.AlignBottom),
             container=dict(row=1, col=0, align=Qt.AlignRight | Qt.AlignBottom),
             col_stretch=[1, 1], row_stretch=[0, 1]
         )
-
         try:
             self.grid.removeWidget(self.container)
         except Exception:
             pass
 
-        # --- Row holding 4 containers (leftmost is the active packing target) ---
+        # Row of 4 containers (leftmost is active)
         self._row = QWidget()
         self._row_layout = QHBoxLayout(self._row)
         self._row_layout.setContentsMargins(0, 0, 0, 0)
         self._row_layout.setSpacing(12)
-
-        # Build container records list
+        # rec: widget,label,capacity,count,effect,anim,fading,error,fixed,orig_border,badge,color,mis_color,batch_spawned
         self._containers = []
 
         def _make_badge(parent_w):
@@ -67,9 +74,10 @@ class PackagingTask(BaseTask):
             b.hide()
             return b
 
-        def _new_container(widget=None):
+        def _new_container(widget=None, color=None):
             w = widget or StorageContainerWidget()
-            _style_container(w)
+            c = color or self._rot[self._next_idx]
+            self._apply_style_by_color(w, c)
             w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
             cap = 0
@@ -88,12 +96,8 @@ class PackagingTask(BaseTask):
 
             badge = _make_badge(w)
 
-            eff = QGraphicsOpacityEffect(w)
-            w.setGraphicsEffect(eff)
-            eff.setOpacity(1.0)
-
-            anim = QPropertyAnimation(eff, b"opacity", self)
-            anim.setDuration(2000)
+            eff = QGraphicsOpacityEffect(w); w.setGraphicsEffect(eff); eff.setOpacity(1.0)
+            anim = QPropertyAnimation(eff, b"opacity", self); anim.setDuration(2000)
 
             w.installEventFilter(self)
 
@@ -108,27 +112,47 @@ class PackagingTask(BaseTask):
                 "error": False,
                 "fixed": False,
                 "orig_border": w.border,
-                "badge": badge
+                "badge": badge,
+                "color": c,         # container's color (red/blue/green)
+                "mis_color": None,  # wrong box color when mis-sorted into front
+                "batch_spawned": False,
             }
             self._position_badge(rec)
             return rec
 
-        first_rec = _new_container(self.container)
-        self._containers.append(first_rec)
-        self._row_layout.addWidget(first_rec["widget"])
+        # Build 4 containers in rotation: c0, c1, c2, c0
+        c0 = self._rot[self._next_idx]
+        first_rec = _new_container(self.container, c0)
+        self._containers.append(first_rec); self._row_layout.addWidget(first_rec["widget"])
 
-        for _ in range(3):
-            rec = _new_container()
-            self._containers.append(rec)
-            self._row_layout.addWidget(rec["widget"])
+        c1 = self._rot[(self._next_idx + 1) % 3]
+        rec = _new_container(color=c1); self._containers.append(rec); self._row_layout.addWidget(rec["widget"])
+
+        c2 = self._rot[(self._next_idx + 2) % 3]
+        rec = _new_container(color=c2); self._containers.append(rec); self._row_layout.addWidget(rec["widget"])
+
+        c3 = c0
+        rec = _new_container(color=c3); self._containers.append(rec); self._row_layout.addWidget(rec["widget"])
+
+        # After placing c0,c1,c2,c0 -> next appended should be c1
+        self._next_idx = (self._next_idx + 1) % 3
 
         self.grid.addWidget(self._row, 1, 0, 1, 2, Qt.AlignRight | Qt.AlignBottom)
 
         # ===== Spawner / worker =====
         self.worker = None
-        self._box_timer = QTimer(self)
 
-        # ===== Minimal arm 'pick-present-return' cycle =====
+        # Timed drip-spawner for batches
+        self._box_timer = QTimer(self)
+        self._box_timer.setInterval(1000)          # drip speed; tweak if needed - adjusts the distance between each box in a set
+        self._box_timer.timeout.connect(self._drip_spawn_tick)
+
+        # Pending batch state
+        self._batch_active = False
+        self._batch_color = None
+        self._batch_remaining = 0
+
+        # ===== Arm pick cycle =====
         self._pick_timer = QTimer(self)
         self._pick_timer.setInterval(16)
         self._pick_timer.timeout.connect(self._tick_pick)
@@ -147,19 +171,24 @@ class PackagingTask(BaseTask):
 
         self._should_fade_current = False
 
+        # flashing for error badge
         self._flash_on = False
         self._flash_timer = QTimer(self)
         self._flash_timer.setInterval(350)
         self._flash_timer.timeout.connect(self._on_flash_tick)
 
-        # repaint once
+        # ----- selection state for click-to-fix (like sorting) -----
+        self._selected_active = False         # True when user has "picked" the bad item
+        self._selected_expected = None        # 'red'|'blue'|'green' expected destination color
+
+        # paint once
         self.arm.update()
         self.conveyor.update()
         for rec in self._containers:
             rec["widget"].update()
             self._position_label(rec)
 
-    # ---------- Helpers ----------
+    # ---------- UI helpers ----------
     def _position_label(self, rec):
         w = rec["widget"]; lbl = rec["label"]
         x = (w.width() - lbl.width()) // 2
@@ -168,8 +197,7 @@ class PackagingTask(BaseTask):
 
     def _position_badge(self, rec):
         w = rec["widget"]; b = rec.get("badge")
-        if not b:
-            return
+        if not b: return
         x = (w.width() - b.width()) // 2
         y = 2
         b.move(max(0, x), max(0, y))
@@ -180,25 +208,43 @@ class PackagingTask(BaseTask):
 
     # ---------- Error visuals ----------
     def _apply_error_visuals(self):
-        for rec in self._containers:
+        for i, rec in enumerate(self._containers):
             w = rec["widget"]
             badge = rec.get("badge")
+
+            # Selection highlight for front takes priority (like SortingTask)
+            if i == 0 and self._selected_active:
+                w.border = QColor("#ffbf00")  # amber
+                w.update()
+                if badge:
+                    badge.hide()  # suppress badge while selected
+                continue
+
             if rec.get("fixed"):
                 if badge:
                     badge.hide()
-                w.border = QColor("#2ecc71")
+                w.border = rec.get("orig_border", w.border)
                 w.update()
                 continue
 
             if rec.get("error"):
-                w.border = QColor("#e74c3c") if self._flash_on else rec.get("orig_border", w.border)
+                mis = rec.get("mis_color")
+                if mis == "red":
+                    flash_color = QColor("#e74c3c")
+                elif mis == "blue":
+                    flash_color = QColor("#3498db")
+                elif mis == "green":
+                    flash_color = QColor("#27ae60")
+                else:
+                    flash_color = QColor("#e74c3c")
+
+                w.border = flash_color if self._flash_on else rec.get("orig_border", w.border)
                 w.update()
+
                 if badge:
                     badge.setStyleSheet(
-                        "color: white;"
-                        "background: #e74c3c;"
-                        "border: 2px solid #b03a2e;"
-                        "border-radius: 10px;"
+                        f"color: white; background: {flash_color.name()};"
+                        "border: 2px solid rgba(0,0,0,80); border-radius: 10px;"
                         "font-weight: 800; font-size: 12px;"
                     )
                     badge.show()
@@ -213,162 +259,273 @@ class PackagingTask(BaseTask):
         self._flash_on = not self._flash_on
         self._apply_error_visuals()
 
+    def _normalize_box_color(self, c):
+        """Return canonical 'red'|'blue'|'green' or None if unknown."""
+        if isinstance(c, str):
+            s = c.strip().lower()
+            return s if s in ("red", "blue", "green") else None
+        try:
+            hexv = c.name().lower()
+        except Exception:
+            return None
+        hex_map = {
+            "#c82828": "red",
+            "#2b4a91": "blue",
+            "#1f7a3a": "green",
+        }
+        return hex_map.get(hexv)
+
+    # ---------- Scheduling & spawning ----------
+    def _count_boxes_on_belt(self, color: str) -> int:
+        cols = getattr(self.conveyor, "_box_colors", None)
+        if not isinstance(cols, list):
+            return 0
+        total = 0
+        for c in cols:
+            if self._normalize_box_color(c) == color:
+                total += 1
+        return total
+
+    def _schedule_batch_for_front(self):
+        """Ensure a full batch for the lead container is scheduled and dripped via timer."""
+        if not self._containers:
+            return
+        front = self._containers[0]
+        color = front.get("color")
+        cap = int(front.get("capacity", 0))
+        cnt = int(front.get("count", 0))
+        if cap <= 0:
+            front["batch_spawned"] = True
+            return
+
+        on_belt = self._count_boxes_on_belt(color)
+        scheduled = self._batch_remaining if (self._batch_active and self._batch_color == color) else 0
+        need = max(0, cap - cnt - on_belt - scheduled)
+
+        if need <= 0:
+            # nothing to add; may still be mid-drip, but we're at/over target
+            front["batch_spawned"] = True
+            # If we're over for any reason, trim the scheduled remainder
+            if self._batch_active and self._batch_color == color:
+                # recompute to avoid overshoot
+                excess = cnt + on_belt + self._batch_remaining - cap
+                if excess > 0:
+                    self._batch_remaining = max(0, self._batch_remaining - excess)
+                    if self._batch_remaining == 0:
+                        self._batch_active = False
+                        self._box_timer.stop()
+            return
+
+        # Add needed amount to the current schedule (or start a new one)
+        self._batch_color = color
+        self._batch_remaining = (scheduled + need)
+        self._batch_active = True
+        front["batch_spawned"] = True  # gate repeated scheduling for this lead
+
+        if not self._box_timer.isActive():
+            self._box_timer.start()
+
+        try:
+            get_logger().log_robot(
+                "Packaging",
+                f"schedule_batch color={color} need={need} "
+                f"(cap={cap}, cnt={cnt}, on_belt={on_belt}, scheduled_pre={scheduled})"
+            )
+        except Exception:
+            pass
+
+    def _drip_spawn_tick(self):
+        """Spawn at most one box each tick, respecting capacity."""
+        if not self._batch_active or self._batch_remaining <= 0:
+            self._box_timer.stop()
+            self._batch_active = False
+            self._batch_remaining = 0
+            return
+
+        if not self._containers:
+            self._box_timer.stop()
+            self._batch_active = False
+            self._batch_remaining = 0
+            return
+
+        front = self._containers[0]
+        lead_color = front.get("color")
+
+        # If lead container changed, reschedule
+        if lead_color != self._batch_color:
+            self._batch_active = False
+            self._batch_remaining = 0
+            self._box_timer.stop()
+            self._schedule_batch_for_front()
+            return
+
+        cap = int(front.get("capacity", 0))
+        cnt = int(front.get("count", 0))
+        on_belt = self._count_boxes_on_belt(self._batch_color)
+        scheduled = self._batch_remaining
+
+        if cnt + on_belt + scheduled > cap:
+            excess = cnt + on_belt + scheduled - cap
+            self._batch_remaining = max(0, self._batch_remaining - excess)
+            scheduled = self._batch_remaining
+            if self._batch_remaining == 0:
+                self._batch_active = False
+                self._box_timer.stop()
+                return
+
+        # === Inject error rate here ===
+        spawn_color = self._batch_color
+        if self.worker and random.random() < self.worker.error_rate:
+            # pick a wrong color
+            choices = [c for c in self._rot if c != self._batch_color]
+            if choices:
+                spawn_color = random.choice(choices)
+
+        if cnt + on_belt + scheduled <= cap and self._batch_remaining > 0:
+            self.conveyor.spawn_box(color=spawn_color)
+            self._batch_remaining -= 1
+
+        if self._batch_remaining <= 0:
+            self._batch_active = False
+            self._box_timer.stop()
+
     # ---------- Worker callbacks ----------
     def _on_worker_fade(self, mode, at_count, capacity, secs):
-        self._should_fade_current = True
-        if self._containers:
-            rec = self._containers[0]
-            rec["error"] = (mode in ("underfill", "overfill"))
-            rec["fixed"] = False
-            try:
-                get_logger().log_robot(
-                    "Packaging",
-                    f"fade_trigger mode={mode} at {at_count}/{capacity} ({secs:.2f}s)"
-                )
-            except Exception:
-                pass
-            self._apply_error_visuals()
+        """
+        Worker suggests a fade when it *thinks* capacity was reached.
+        Now: always fade once front count >= capacity, even if errored.
+        """
+        if not self._containers:
+            return
+        rec = self._containers[0]
 
-    # ---------- Departing box helper ----------
-    def _launch_departing_box(self, rec, px_per_tick: int = 5, interval_ms: int = 16, max_travel_px: int = 0):
-        """Clone the container, slide it left, and vanish after max_travel_px pixels."""
-        w = rec["widget"]
+        if rec["count"] >= rec["capacity"] > 0:
+            self._should_fade_current = True
+        else:
+            if self.worker:
+                self.worker.rearm_fade()
 
-        clone = StorageContainerWidget(self)
-        clone.resize(w.size())
-        clone.move(w.mapTo(self, w.rect().topLeft()))
-
-        clone.border = w.border
-        clone.fill_top = w.fill_top
-        clone.fill_bottom = w.fill_bottom
-        clone.rib = w.rib
-        clone.show()
-
-        travelled = {"dx": 0}
-
-        def step():
-            x, y = clone.pos().x(), clone.pos().y()
-            travelled["dx"] += px_per_tick
-            if travelled["dx"] >= max_travel_px:
-                slide_timer.stop()
-                clone.deleteLater()
-                return
-            clone.move(x - px_per_tick, y)
-
-        slide_timer = QTimer(self)
-        slide_timer.timeout.connect(step)
-        slide_timer.start(interval_ms)
-
-
-    # ---------- Packing count ----------
+    # ---------- Packing count & new error detection ----------
     def _on_item_packed(self):
         if not self._containers:
             return
         active = self._containers[0]
-
         if active["fading"]:
             return
 
+        raw_packed = getattr(self.arm, "held_box_color", None)
+        packed_color = self._normalize_box_color(raw_packed)
+        active_color = self._normalize_box_color(active.get("color"))
+
+        # increment front container count
         active["count"] += 1
         self._update_label(active)
-
-        msg = f"Packaging Task: Packed {active['count']}/{active['capacity']}"
-        print(msg)
-
         try:
-            get_logger().log_robot("Packaging", f"pack {active['count']}/{active['capacity']}")
+            get_logger().log_robot("Packaging", f"pack {active['count']}/{active['capacity']} color={packed_color}")
         except Exception:
             pass
+
+        # Only flag error when known mismatch
+        if packed_color is not None and active_color is not None and (packed_color != active_color):
+            active["error"] = True
+            active["fixed"] = False
+            active["mis_color"] = packed_color
+            self._apply_error_visuals()
+            if self.worker:
+                self.worker.rearm_fade()
+        else:
+            if active.get("mis_color") is None and active.get("error"):
+                active["error"] = False
+                active["fixed"] = False
+                self._apply_error_visuals()
 
         if self.worker:
             self.worker.record_pack()
 
-        need_fade = self._should_fade_current
-        if not self.worker:
-            need_fade = need_fade or (active["count"] >= active["capacity"])
+        # Fade condition: always fade once capacity reached, even if error == True
+        if self._should_fade_current or (active["count"] >= active["capacity"] > 0):
+            if not active["fading"]:
+                self._begin_fade_and_shift()
 
-        if need_fade and not active["fading"]:
-            active["fading"] = True
-            self._should_fade_current = False
-            eff = active["effect"]; anim = active["anim"]; w = active["widget"]
+    def _begin_fade_and_shift(self):
+        """Fade current front, shift row, append next color in rotation."""
+        if not self._containers:
+            return
+        active = self._containers[0]
+        active["fading"] = True
+        self._should_fade_current = False
 
-            anim.stop()
-            eff.setOpacity(1.0)
-            anim.setStartValue(1.0)
-            anim.setEndValue(0.0)
+        # stop any ongoing batch for this lead
+        self._batch_active = False
+        self._batch_remaining = 0
+        self._batch_color = None
+        if self._box_timer.isActive():
+            self._box_timer.stop()
 
-            def _finished():
-                # launch clone sliding left (tweak speed/edge behavior here if you like)
-                self._launch_departing_box(active, px_per_tick=5, interval_ms=16, max_travel_px=230)
+        # clear pick selection when fading out the front
+        self._selected_active = False
+        self._selected_expected = None
 
-                # normal container shift logic
-                w.hide()
-                self._row_layout.removeWidget(w)
-                try:
-                    self._containers.pop(0)
-                except Exception:
-                    pass
+        eff = active["effect"]; anim = active["anim"]; w = active["widget"]
+        anim.stop()
+        eff.setOpacity(1.0)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
 
-                if self.worker and self.worker.isRunning():
-                    new_cap = PackagingWorker.pick_capacity()
-                    new_rec = self._create_new_container(initial_cap=new_cap)
-                else:
-                    new_rec = self._create_new_container(initial_cap=None)
+        def _finished():
+            # remove leftmost
+            w.hide()
+            self._row_layout.removeWidget(w)
+            try:
+                self._containers.pop(0)
+            except Exception:
+                pass
 
-                self._containers.append(new_rec)
-                self._row_layout.addWidget(new_rec["widget"])
+            # append new container using rotation color
+            new_color = self._rot[self._next_idx]
+            new_cap = PackagingWorker.pick_capacity() if (self.worker and self.worker.isRunning()) else 0
+            new_rec = self._create_new_container(initial_cap=new_cap, color=new_color)
+            self._containers.append(new_rec)
+            self._row_layout.addWidget(new_rec["widget"])
 
-                for rec2 in self._containers:
-                    self._position_label(rec2)
-                    self._position_badge(rec2)
+            # labels/badges
+            for rec2 in self._containers:
+                self._position_label(rec2)
+                self._position_badge(rec2)
 
-                if self.worker and self._containers:
-                    leftmost = self._containers[0]
-                    self.worker.begin_container(leftmost["capacity"])
-                    try:
-                        get_logger().log_robot(
-                            "Packaging",
-                            f"begin_container capacity={leftmost['capacity']}"
-                        )
-                    except Exception:
-                        pass
+            # next rotation color
+            self._next_idx = (self._next_idx + 1) % 3
 
-                self._apply_error_visuals()
-
+            # inform worker about new active container, including its color
+            if self.worker and self._containers:
+                leftmost = self._containers[0]
+                self.worker.begin_container(leftmost["capacity"], leftmost.get("color"))
                 try:
                     get_logger().log_robot(
                         "Packaging",
-                        f"shift_completed new_right_capacity={new_rec['capacity']}"
+                        f"begin_container capacity={leftmost['capacity']} color={leftmost.get('color')}"
                     )
                 except Exception:
                     pass
 
-            try:
-                anim.finished.disconnect()
-            except Exception:
-                pass
-            anim.finished.connect(_finished)
-            anim.start()
+            # refresh visuals
+            self._apply_error_visuals()
 
-    def _create_new_container(self, initial_cap=None):
+            # schedule the exact batch for the new front
+            self._schedule_batch_for_front()
+
+        try:
+            anim.finished.disconnect()
+        except Exception:
+            pass
+        anim.finished.connect(_finished)
+        anim.start()
+
+    # ---------- Create container ----------
+    def _create_new_container(self, initial_cap=None, color=None):
         w = StorageContainerWidget()
-        c = random.choice(["red", "blue", "green"])
-        if c == "red":
-            w.border = QColor("#8c1f15")
-            w.fill_top = QColor("#ffd6d1")
-            w.fill_bottom = QColor("#ffb8b0")
-            w.rib = QColor(140, 31, 21, 110)
-        elif c == "blue":
-            w.border = QColor("#2b4a91")
-            w.fill_top = QColor("#dbe8ff")
-            w.fill_bottom = QColor("#c7daff")
-            w.rib = QColor(43, 74, 145, 110)
-        else:
-            w.border = QColor("#1f7a3a")
-            w.fill_top = QColor("#d9f7e6")
-            w.fill_bottom = QColor("#bff0d3")
-            w.rib = QColor(31, 122, 58, 110)
-
+        c = color or self._rot[self._next_idx]
+        self._apply_style_by_color(w, c)
         w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
         cap = 0 if initial_cap is None else int(initial_cap)
@@ -391,13 +548,8 @@ class PackagingTask(BaseTask):
         badge.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         badge.hide()
 
-        eff = QGraphicsOpacityEffect(w)
-        w.setGraphicsEffect(eff)
-        eff.setOpacity(1.0)
-
-        anim = QPropertyAnimation(eff, b"opacity", self)
-        anim.setDuration(2000)
-
+        eff = QGraphicsOpacityEffect(w); w.setGraphicsEffect(eff); eff.setOpacity(1.0)
+        anim = QPropertyAnimation(eff, b"opacity", self); anim.setDuration(2000)
         w.installEventFilter(self)
 
         rec = {
@@ -411,20 +563,22 @@ class PackagingTask(BaseTask):
             "error": False,
             "fixed": False,
             "orig_border": w.border,
-            "badge": badge
+            "badge": badge,
+            "color": c,
+            "mis_color": None,
+            "batch_spawned": False,
         }
         self._position_label(rec)
         self._position_badge(rec)
         return rec
 
-    # ---------- Spawning ----------
-    def spawn_box_from_worker(self, box_data):
-        color = box_data.get("color") or random.choice(["red", "blue", "green"])
-        try:
-            get_logger().log_robot("Packaging", f"spawn_box color={color}")
-        except Exception:
-            pass
-        self.conveyor.spawn_box(color=color)
+    # ---------- Worker hook (now just a scheduler poke) ----------
+    def spawn_box_from_worker(self, box_data=None):
+        """
+        Called by worker pacing; we now use it only to (re)check and schedule
+        the batch for the current lead.
+        """
+        self._schedule_batch_for_front()
 
     # ---------- Lifecycle ----------
     def start(self, pace=None, error_rate=None):
@@ -434,6 +588,11 @@ class PackagingTask(BaseTask):
         if self._box_timer.isActive():
             self._box_timer.stop()
 
+        # --- dynamic box spacing based on pace ---
+        spacing_map = {"slow": 3000, "medium": 2000, "fast": 1000}
+        interval = spacing_map.get(pace, 500)
+        self._box_timer.setInterval(interval)
+
         if not self.worker or not self.worker.isRunning():
             self.worker = PackagingWorker(pace=pace, error_rate=error_rate)
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
@@ -442,6 +601,7 @@ class PackagingTask(BaseTask):
             self.worker.metrics_live.connect(self._on_metrics_live)
             self.worker.start()
 
+        # reset counts/caps (colors remain fixed per rotation)
         for rec in self._containers:
             rec["count"] = 0
             rec["capacity"] = PackagingWorker.pick_capacity()
@@ -451,16 +611,21 @@ class PackagingTask(BaseTask):
             rec["effect"].setOpacity(1.0)
             rec["widget"].show()
             rec["fading"] = False
+            rec["batch_spawned"] = False
             rec["widget"].border = rec.get("orig_border", rec["widget"].border)
             if rec.get("badge"):
                 rec["badge"].hide()
             self._update_label(rec)
 
+        # tell worker the active container's capacity and color
         if self._containers:
             leftmost = self._containers[0]
-            self.worker.begin_container(leftmost["capacity"])
+            self.worker.begin_container(leftmost["capacity"], leftmost.get("color"))
             try:
-                get_logger().log_robot("Packaging", f"begin_container capacity={leftmost['capacity']}")
+                get_logger().log_robot(
+                    "Packaging",
+                    f"begin_container capacity={leftmost['capacity']} color={leftmost.get('color')}"
+                )
             except Exception:
                 pass
         self._should_fade_current = False
@@ -468,6 +633,7 @@ class PackagingTask(BaseTask):
         if not self._flash_timer.isActive():
             self._flash_timer.start()
 
+        # arm FSM start
         self._now_ms = 0
         self._last_touch_time_ms = -10000
         self._pick_state = "idle"
@@ -477,10 +643,18 @@ class PackagingTask(BaseTask):
             self._set_arm(sh, el)
             self._pick_timer.start()
 
+        # clear selection state
+        self._selected_active = False
+        self._selected_expected = None
+
+        # Schedule the exact batch for the initial front
+        self._schedule_batch_for_front()
+
         try:
             get_logger().log_user("Packaging", "control", "start", f"pace={pace},error_rate={error_rate}")
         except Exception:
             pass
+
 
     def stop(self):
         self.conveyor.enable_motion(False)
@@ -497,6 +671,13 @@ class PackagingTask(BaseTask):
             self._flash_timer.stop()
         self._flash_on = False
 
+        # clear selection & batch state
+        self._selected_active = False
+        self._selected_expected = None
+        self._batch_active = False
+        self._batch_remaining = 0
+        self._batch_color = None
+
         sh, el = self._pose_home()
         self._set_arm(sh, el)
         self.arm.held_box_visible = False
@@ -511,28 +692,19 @@ class PackagingTask(BaseTask):
         try:
             get_logger().log_robot(
                 "Packaging",
-                f"metrics total={metrics.get('total')} errors={metrics.get('errors')} "
-                f"acc={metrics.get('accuracy'):.2f}% ipm={metrics.get('items_per_min'):.2f}"
+                f"metrics total={metrics.get('pack_total')} errors={metrics.get('pack_errors')} "
+                f"acc={metrics.get('pack_accuracy'):.2f}% ipm={metrics.get('pack_items_per_min'):.2f}"
             )
         except Exception:
             pass
         print("Packaging metrics:", metrics)
 
     # ---------- Arm poses ----------
-    def _pose_home(self):
-        return (-90.0, 0.0)
-
-    def _pose_prep(self):
-        return (-92.0, -12.0)
-
-    def _pose_pick(self):
-        return (-110.0, -95.0)
-
-    def _pose_lift(self):
-        return (-93.0, -10.0)
-
-    def _pose_present(self):
-        return (-240.0, -12.0)
+    def _pose_home(self):    return (-90.0, 0.0)
+    def _pose_prep(self):    return (-92.0, -12.0)
+    def _pose_pick(self):    return (-110.0, -95.0)
+    def _pose_lift(self):    return (-93.0, -10.0)
+    def _pose_present(self): return (-240.0, -12.0)
 
     # ---------- FSM plumbing ----------
     def _set_arm(self, shoulder, elbow):
@@ -604,16 +776,14 @@ class PackagingTask(BaseTask):
             elif self._pick_state == "idle_pause":
                 self._pick_state = "idle"
 
-    # ---------- Helpers ----------
+    # ---------- Belt/box helpers ----------
     def _grip_x(self):
         return self.conveyor.width() * 0.40
 
     def _box_near_grip(self):
         boxes = getattr(self.conveyor, "_boxes", None)
-        if not boxes:
-            return False
-        gx = self._grip_x()
-        w = self._touch_window_px
+        if not boxes: return False
+        gx = self._grip_x(); w = self._touch_window_px
         for x in boxes:
             if (gx - w) <= x <= (gx + w):
                 return True
@@ -621,18 +791,14 @@ class PackagingTask(BaseTask):
 
     def _despawn_if_past_cutoff(self):
         boxes = getattr(self.conveyor, "_boxes", None)
-        if not boxes:
-            return
+        if not boxes: return
         colors = getattr(self.conveyor, "_box_colors", None)
         detect_x = self._grip_x()
         cutoff_x = detect_x + self._despawn_offset_px
-
         hit_index = -1
         for i, x in enumerate(boxes):
             if x >= cutoff_x:
-                hit_index = i
-                break
-
+                hit_index = i; break
         if hit_index != -1:
             del boxes[hit_index]
             if isinstance(colors, list) and hit_index < len(colors):
@@ -641,47 +807,115 @@ class PackagingTask(BaseTask):
 
     def _color_of_box_in_window(self):
         boxes = getattr(self.conveyor, "_boxes", None)
-        cols = getattr(self.conveyor, "_box_colors", None)
-        if not boxes or not cols:
-            return None
-        gx = self._grip_x()
-        w = self._touch_window_px
+        cols  = getattr(self.conveyor, "_box_colors", None)
+        if not boxes or not cols: return None
+        gx = self._grip_x(); w = self._touch_window_px
         for i, x in enumerate(boxes):
             if (gx - w) <= x <= (gx + w):
                 if i < len(cols):
                     return cols[i]
         return None
 
-    # ---------- Smart-fix ----------
-    def _smart_fix(self, rec):
-        if not rec.get("error"):
-            try:
-                get_logger().log_user("Packaging", "container", "click", "no error to fix")
-            except Exception:
-                pass
+    # ---------- Error smart-fix (click to pick, click to place — one attempt) ----------
+    def _smart_fix_pick_or_place(self, clicked_rec):
+        """
+        Like SortingTask, but user gets only ONE attempt:
+          - Click front (if errored) to pick.
+          - Click ANY container to place:
+              - If target color == expected -> move 1 from front to target; clear error.
+              - Else -> still move 1 out of front, error is consumed, and lead returns to normal.
+          - NEW: if front is fading but has error, allow user to fix -> stops fade immediately.
+        """
+        if not self._containers:
             return
 
-        cap = rec.get("capacity", 0)
-        if cap > 0:
-            rec["count"] = cap
-            self._update_label(rec)
-
-        rec["error"] = False
-        rec["fixed"] = True
-        self._mark_fixed_visual(rec)
-        if rec.get("badge"):
-            rec["badge"].hide()
-
+        # Identify indices
         try:
-            get_logger().log_user("Packaging", "container", "smart_fix", f"set to {cap}/{cap}")
-        except Exception:
-            pass
+            idx_clicked = self._containers.index(clicked_rec)
+        except ValueError:
+            return
+        front = self._containers[0]
 
+        # NEW: cancel fade if user tries to fix fading+errored front
+        if idx_clicked == 0 and front.get("fading") and front.get("error"):
+            front["fading"] = False
+            self._should_fade_current = False
+            eff = front["effect"]
+            anim = front["anim"]
+            anim.stop()
+            eff.setOpacity(1.0)
+            try:
+                get_logger().log_user("Packaging", "container_front", "cancel_fade", "error fix started")
+            except Exception:
+                pass
+            # allow continuing into normal "click to pick" flow
+
+        # 1) If no selection yet: clicking front with an error -> pick it
+        if not self._selected_active:
+            if idx_clicked == 0 and front.get("error"):
+                self._selected_active = True
+                self._selected_expected = front.get("mis_color")
+                self._apply_error_visuals()  # amber border on front
+                try:
+                    get_logger().log_user("Packaging", "container_front", "pick", f"needs={self._selected_expected}")
+                except Exception:
+                    pass
+            else:
+                try:
+                    get_logger().log_user("Packaging", "container", "click", "no selection active")
+                except Exception:
+                    pass
+            return
+
+        # 2) Selection active: clicking ANY container attempts a drop
+        target_color = clicked_rec.get("color")
+        expected = self._selected_expected
+
+        if expected is None:
+            self._selected_active = False
+            self._apply_error_visuals()
+            return
+
+        # Consume 1 from front either way
+        if front["count"] > 0:
+            front["count"] -= 1
+            self._update_label(front)
+        clicked_rec["count"] += 1
+        self._update_label(clicked_rec)
+
+        if target_color == expected:
+            # Correct drop: clear error
+            front["error"] = False
+            front["fixed"] = True
+            front["mis_color"] = None
+            self._mark_fixed_visual(front)
+            try:
+                get_logger().log_user("Packaging", f"container_{target_color}", "drop", "resolved")
+            except Exception:
+                pass
+        else:
+            # Wrong drop: consume the error anyway
+            front["error"] = False
+            front["fixed"] = False
+            front["mis_color"] = None
+            try:
+                get_logger().log_user("Packaging", f"container_{target_color}", "drop", f"incorrect placement (error consumed)")
+            except Exception:
+                pass
+
+        # Reset selection and visuals
+        self._selected_active = False
+        self._selected_expected = None
         self._apply_error_visuals()
+
+        if self.worker:
+            self.worker.rearm_fade()
+
 
     def _mark_fixed_visual(self, rec):
         w = rec["widget"]
-        w.border = QColor("#2ecc71")
+        # back to original (no green success outline)
+        w.border = rec.get("orig_border", w.border)
         w.update()
 
     # ---------- Keep labels centered + handle clicks ----------
@@ -692,13 +926,11 @@ class PackagingTask(BaseTask):
                     self._position_label(rec)
                     self._position_badge(rec)
                     break
-
         if event.type() == QEvent.MouseButtonPress:
             for rec in self._containers:
                 if obj is rec["widget"]:
-                    self._smart_fix(rec)
+                    self._smart_fix_pick_or_place(rec)
                     return True
-
         return super().eventFilter(obj, event)
 
     def _on_metrics_live(self, metrics):

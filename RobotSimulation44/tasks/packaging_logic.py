@@ -1,169 +1,127 @@
+# tasks/packaging_logic.py
 import time, random
 from PyQt5.QtCore import QThread, pyqtSignal
 
 
 class PackagingWorker(QThread):
     """
-    Background 'brain' for the Packaging task.
+    Background brain for the Packaging task.
 
-    Responsibilities:
-    - Spawns boxes at a configurable pace.
-    - Chooses per-container scenario based on error_rate:
-        * normal   -> fade at capacity
-        * underfill-> fade below capacity (e.g., 2/4)
-        * overfill -> fade above capacity (e.g., 5/4)
-    - Tells the UI when the current (leftmost) container should fade.
+    New behavior:
+    - Spawns boxes matching the active container color most of the time.
+    - With probability error_rate, spawns the wrong color (one of the other two).
+    - Fade suggestion is still driven by reaching capacity, but the UI may defer
+      fading if an error is present; the UI can call rearm_fade() to allow a later fade.
     """
-    # Spawner side (already used by your PackagingTask)
-    box_spawned = pyqtSignal(dict)     # {"color": <str>, "error": <bool>}
-    metrics_ready = pyqtSignal(dict)   # {"total": int, "errors": int, "accuracy": float, "items_per_min": float}
-    metrics_live = pyqtSignal(dict)    # live updated metrics
-
-    # New: UI should fade the active container NOW
-    # args: mode ("normal"|"underfill"|"overfill"), count_at_trigger, capacity, seconds_elapsed
-    container_should_fade = pyqtSignal(str, int, int, float)
+    box_spawned = pyqtSignal(dict)      # {"color": <"red"|"blue"|"green">}
+    metrics_ready = pyqtSignal(dict)    # end-of-run summary
+    metrics_live = pyqtSignal(dict)     # live metrics
+    container_should_fade = pyqtSignal(str, int, int, float)  # mode, count, capacity, secs
 
     def __init__(self, pace="slow", error_rate=0.0):
         super().__init__()
-        self.pace = pace
-        self.error_rate = float(error_rate)
+        self.pace = pace or "slow"
+        self.error_rate = float(error_rate or 0.0)
         self.running = True
 
-        # pool of usable box colors
-        self.colors = ["red", "blue", "green"]
-
-        # Items per second ranges
         self.pace_map = {
-            "slow": (0.1, 0.3),
+            "slow":   (0.1, 0.3),
             "medium": (0.3, 0.7),
-            "fast": (0.7, 1.0)
+            "fast":   (0.7, 1.0),
         }
 
-        # Spawner metrics
+        # metrics
         self.total = 0
-        self.correct = 0               # <-- track correctly packed boxes
         self.errors = 0
+        self.correct = 0
+        self.start_time = time.time()
 
-        # ---- Per-container decision state (for the current LEFTMOST only) ----
+        # per-container state
         self._cur_capacity = 0
         self._cur_count = 0
         self._cur_start_ts = None
+        self._fired = False
 
-        self._mode = "normal"         # "normal" | "underfill" | "overfill"
-        self._fade_trigger = 0        # count threshold to trigger fade
-        self._fired = False           # ensure we signal only once per container
+        # color policy
+        self._cur_color = "red"
+        self._palette = ("red", "blue", "green")
 
-        # Initialize timing for metrics
-        self.start_time = time.time()  # track thread start
-        self.total_elapsed = 0.0       # accumulated time for metrics
-
-    # ---------- Spawner thread ----------
     def run(self):
-        start = time.time()
-        lo, hi = self.pace_map.get(self.pace, (0.5, 1.0))
-
+        lo, hi = self.pace_map.get(self.pace, (0.3, 0.7))
         while self.running:
-            # Determine if current box is an error
-            is_error = (random.random() < self.error_rate)
+            # choose color: usually the active color; sometimes wrong
+            if random.random() < self.error_rate:
+                others = [c for c in self._palette if c != self._cur_color]
+                color = random.choice(others)
+                is_error = True
+            else:
+                color = self._cur_color
+                is_error = False
 
-            # Emit box spawned signal with random color
-            self.box_spawned.emit({
-                "color": random.choice(self.colors),
-                "error": is_error
-            })
+            self.box_spawned.emit({"color": color})
 
-            # Variable cadence for a more natural feel
-            rate = max(1e-6, random.uniform(lo, hi))   # items per second
+            # pacing
+            rate = max(1e-6, random.uniform(lo, hi))  # items/sec
             time.sleep(1.0 / rate)
 
-        # Compute final metrics
-        elapsed_time = max(1e-6, time.time() - self.start_time)
-        self.total_elapsed += elapsed_time
+        # end-of-thread summary
+        elapsed = max(1e-6, time.time() - self.start_time)
         self.metrics_ready.emit({
             "pack_total": self.total,
             "pack_accuracy": (self.correct / self.total) * 100 if self.total else 0,
             "pack_efficiency": (self.correct / self.total) * 100 if self.total else 0,
-            "pack_throughput": self.total / elapsed_time,
+            "pack_throughput": self.total / elapsed,
             "pack_errors": self.errors,
             "pack_error_rate": (self.errors / self.total) * 100 if self.total else 0,
-            "pack_items_per_min": (self.total / elapsed_time) * 60,
-            "pack_error_rate_config_percent": round(self.error_rate * 100, 2)
+            "pack_items_per_min": (self.total / elapsed) * 60,
+            "pack_error_rate_config_percent": round(self.error_rate * 100, 2),
         })
 
     def stop(self):
         self.running = False
 
-    # ---------- Container decision API (called from UI thread) ----------
-
     @staticmethod
     def pick_capacity():
-        """Single source of truth for container capacity policy."""
         return random.choice((4, 5, 6))
 
-    def begin_container(self, capacity: int):
-        """
-        Call this when the LEFTMOST active container changes to a fresh one.
-        We pick a scenario for THIS container based on error_rate.
-        """
+    def begin_container(self, capacity: int, color: str = None):
+        """UI tells us a fresh leftmost container is active (and its color)."""
         self._cur_capacity = int(capacity)
         self._cur_count = 0
         self._cur_start_ts = time.time()
         self._fired = False
+        if color:
+            self._cur_color = str(color)
 
-        # Decide scenario
-        if random.random() < self.error_rate:
-            # error container: 50/50 underfill vs overfill
-            if random.random() < 0.5:
-                # underfill: fade at some count in [1, capacity-1]
-                self._mode = "underfill"
-                self._fade_trigger = max(1, random.randint(1, max(1, self._cur_capacity - 1)))
-            else:
-                # overfill: fade at capacity+1 or capacity+2
-                self._mode = "overfill"
-                self._fade_trigger = self._cur_capacity + random.randint(1, 2)
-        else:
-            # normal: fade exactly at capacity
-            self._mode = "normal"
-            self._fade_trigger = self._cur_capacity
-
-    def record_pack(self) -> bool:
+    def record_pack(self):
         """
-        Call this each time the UI has 'packed' one item into the active container.
-        Returns True when the container should fade now (also emits container_should_fade).
+        Called by UI each time an item is packed into the active container.
+        We maintain metrics and *suggest* a fade when count reaches capacity.
         """
-        if self._cur_capacity <= 0:
-            return False
-
         self._cur_count += 1
-
-        # Track correct/error packing
-        is_error = random.random() < self.error_rate
         self.total += 1
-        if is_error:
-            self.errors += 1
-        else:
-            self.correct += 1
 
-        elapsed_time = max(time.time() - self.start_time, 1)
-
-        # emit live metrics in full format
+        # We don't know the box color here; let the UI decide correctness.
+        # Keep live throughput style metrics only.
+        elapsed = max(time.time() - self.start_time, 1.0)
         self.metrics_live.emit({
             "pack_total": self.total,
             "pack_accuracy": (self.correct / self.total) * 100 if self.total else 0,
             "pack_efficiency": (self.correct / self.total) * 100 if self.total else 0,
-            "pack_throughput": self.total / elapsed_time,
+            "pack_throughput": self.total / elapsed,
             "pack_errors": self.errors,
             "pack_error_rate": (self.errors / self.total) * 100 if self.total else 0,
-            "pack_items_per_min": (self.total / elapsed_time) * 60,
-            "pack_error_rate_config_percent": round(self.error_rate * 100, 2)
+            "pack_items_per_min": (self.total / elapsed) * 60,
+            "pack_error_rate_config_percent": round(self.error_rate * 100, 2),
         })
 
-        # Check fade trigger
-        if not self._fired and self._cur_count >= self._fade_trigger:
+        # Suggest fade once per container when we reach capacity
+        if not self._fired and self._cur_capacity > 0 and self._cur_count >= self._cur_capacity:
             self._fired = True
-            secs = max(0.0, time.time() - self._cur_start_ts) if self._cur_start_ts else 0.0
-            # Tell the UI to fade the current container NOW
-            self.container_should_fade.emit(self._mode, self._cur_count, self._cur_capacity, secs)
-            return True
+            secs = max(0.0, time.time() - (self._cur_start_ts or time.time()))
+            # "mode" kept for compatibility (unused by UI logic now)
+            self.container_should_fade.emit("normal", self._cur_count, self._cur_capacity, secs)
 
-        return False
+    def rearm_fade(self):
+        """UI can call this if it postponed the fade (e.g., due to an error)."""
+        self._fired = False
