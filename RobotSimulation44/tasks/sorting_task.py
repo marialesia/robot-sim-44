@@ -122,6 +122,8 @@ class SortingTask(BaseTask):
         self._bin_errors = {k: [] for k in self._slot_to_widget.keys()}  # slot -> [ids]
         self._next_eid = 1
         self._selected_error = None                      # currently “picked up” error id (or None)
+        # Alarm state
+        self._alarm_active = False
 
         # Save original borders so we can highlight & restore
         self._orig_borders = {k: w.border for k, w in self._slot_to_widget.items()}
@@ -633,8 +635,11 @@ class SortingTask(BaseTask):
         b.move(max(0, x), max(0, y))
 
     def _apply_flash_colors(self):
-        """Apply flashing borders per-bin based on oldest unresolved error, and update badges."""
+        """Apply flashing borders per-bin based on oldest unresolved error, and update badges.
+           Alarm starts only if an error has been active for >=2s, and stops when all are cleared."""
         selected_slot = self._current_selected_slot()
+        oldest_age = 0.0  # track age of the oldest unresolved error
+
         for slot, w in self._slot_to_widget.items():
             ids = self._bin_errors.get(slot, [])
             badge = self._badges.get(slot)
@@ -643,7 +648,7 @@ class SortingTask(BaseTask):
                 head = ids[0]
                 rec = self._errors.get(head)
                 if rec:
-                    # Border flashing
+                    # Border flashing color (based on error color)
                     flash_q = self._slot_color_map.get(
                         rec['color'], self._orig_borders.get(slot, w.border)
                     )
@@ -651,7 +656,7 @@ class SortingTask(BaseTask):
                         w.border = flash_q if self._flash_on else self._orig_borders.get(slot, w.border)
                         w.update()
 
-                    # Badge: solid colored circle with white "!"
+                    # Badge styling
                     if badge:
                         q = self._slot_color_map.get(rec['color'])
                         if q:
@@ -662,6 +667,14 @@ class SortingTask(BaseTask):
                                 "border-radius: 11px; font-weight: 800; font-size: 14px;"
                             )
                             badge.show()
+
+                    # --- compute age of this error ---
+                    import time
+                    started = self._error_start_times.get(head)
+                    if started:
+                        age = time.time() - started
+                        if age > oldest_age:
+                            oldest_age = age
             else:
                 # No errors -> restore original + hide badge
                 if w.border != self._orig_borders.get(slot, w.border) and slot != selected_slot:
@@ -669,6 +682,16 @@ class SortingTask(BaseTask):
                     w.update()
                 if badge:
                     badge.hide()
+
+        # --- Alarm logic (single place) ---
+        if self._errors:
+            if oldest_age >= 2.0 and not getattr(self, "_alarm_active", False):
+                self.audio.start_alarm()
+                self._alarm_active = True
+        else:
+            if getattr(self, "_alarm_active", False):
+                self.audio.stop_alarm()
+                self._alarm_active = False
 
     def _flash_tick(self):
         self._flash_on = not self._flash_on
@@ -678,32 +701,35 @@ class SortingTask(BaseTask):
         # Always log the user click
         get_logger().log_user("Sorting", f"container_{slot}", "click", "container clicked")
 
-        # No selection yet: try to pick one error from this wrong bin
+        # === CASE 1: Not holding anything, attempt to PICK from this bin ===
         if self._selected_error is None:
             ids = self._bin_errors.get(slot, [])
             if not ids:
                 print(f"(Sorting Task: No errors in {slot} to pick up)")
                 get_logger().log_user("Sorting", f"container_{slot}", "click", "no errors to pick up")
                 return
-            eid = ids.pop(0)  # FIFO: one error per click
+
+            # FIFO pick one error from the clicked bin
+            eid = ids.pop(0)
             rec = self._errors.get(eid)
             if not rec:
                 return
+
             self._selected_error = eid
             self._highlight_bin(slot, True)
             msg = (f"Sorting Task: Picked error #{eid}: {rec['color']} currently in {slot}. "
                    f"Click the correct container ({rec['actual']}).")
             print(msg)
-            get_logger().log_user("Sorting", f"container_{slot}", "pick", f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
+            get_logger().log_user("Sorting", f"container_{slot}", "pick",
+                                  f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
 
-            #play "correct" sound when box is fixed
-            self.audio.play_correct()
+            # Removed self.audio.play_correct() here (no sound on pick)
 
-            # update flashing/badges immediately (selected bin should stop flashing)
+            # Update flashing/badges immediately (selected bin stops flashing)
             self._apply_flash_colors()
             return
 
-        # We’re holding an error; drop it onto the clicked bin
+        # === CASE 2: Holding an error, drop it into clicked bin ===
         eid = self._selected_error
         rec = self._errors.get(eid)
         if not rec:
@@ -725,10 +751,10 @@ class SortingTask(BaseTask):
 
         rec['current'] = new_slot
 
-        #Add a count to total corrections
+        # Add a count to total corrections
         self._total_corrections += 1
         if new_slot == rec['actual']:
-            #Add a count to correct corrections
+            # Correct placement — resolve the error
             self._correct_corrections += 1
 
             # --- RECORD COMPLETION TIME ---
@@ -736,27 +762,31 @@ class SortingTask(BaseTask):
             start_time = self._error_start_times.pop(eid, None)
             if start_time is not None:
                 elapsed = time.time() - start_time
-    
+
             print(f"Sorting Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
-            get_logger().log_user("Sorting", f"container_{new_slot}", "drop", f"resolved eid={eid}, color={rec['color']}")
+            get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
+                                  f"resolved eid={eid}, color={rec['color']}")
+
             try:
                 if eid in self._bin_errors.get(new_slot, []):
                     self._bin_errors[new_slot].remove(eid)
             except ValueError:
                 pass
+
             del self._errors[eid]
             self._selected_error = None
+
+            # Play correct chime ONLY here
+            self.audio.play_correct()
+
             # --- Stop alarm only when ALL errors are cleared ---
             try:
-                # Authoritative check via error registry
                 no_errors_left = not self._errors
-                # Belt-and-braces: also ensure per-bin lists are empty
                 if not no_errors_left:
                     no_errors_left = all(len(v) == 0 for v in self._bin_errors.values())
                 if no_errors_left:
                     self.audio.stop_alarm()
             except Exception:
-                # Never let audio issues break the UI flow
                 pass
         else:
             # Still wrong: place into this bin and keep “holding” it
@@ -764,9 +794,10 @@ class SortingTask(BaseTask):
             self._selected_error = eid
             self._highlight_bin(new_slot, True)
             print(f"Sorting Task: Moved error #{eid} onto {new_slot} (needs {rec['actual']}). Click again to fix.")
-            get_logger().log_user("Sorting", f"container_{new_slot}", "drop", f"still wrong eid={eid}, needs={rec['actual']}")
+            get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
+                                  f"still wrong eid={eid}, needs={rec['actual']}")
 
-        # Refresh flashing + badges to reflect new oldest-error colors per bin
+        # Refresh flashing + badges
         self._apply_flash_colors()
 
     # ===== Worker signal handlers =====
@@ -806,11 +837,14 @@ class SortingTask(BaseTask):
             print(msg)
             get_logger().log_robot("Sorting", msg)
 
-            # play incorrect sound, then alarm
-            self.audio.play_incorrect_with_alarm()
+            # play only the incorrect chime ONCE here
+            self.audio.play_incorrect()
+
+            # Alarm will be started/stopped by _apply_flash_colors (after 2s if unresolved)
 
             # Update flashing/badges immediately so the bin shows this (oldest) error color
             self._apply_flash_colors()
+
 
     def _on_metrics_live(self, metrics):
         """Receive live metrics from the worker and update MetricsManager in real time."""

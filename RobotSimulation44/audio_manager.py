@@ -1,4 +1,3 @@
-# audio_manager.py
 from PyQt5.QtMultimedia import QSoundEffect
 from PyQt5.QtCore import QUrl, QTimer
 
@@ -9,6 +8,7 @@ class AudioManager:
         self.alarm_delay_timer = QTimer()
         self.alarm_delay_timer.setSingleShot(True)
         self.alarm_delay_timer.timeout.connect(self.start_alarm)
+
         # Conveyor belt (looping)
         self.conveyor = QSoundEffect()
         self.conveyor.setSource(QUrl.fromLocalFile(base_path + "conveyor_belt_single.wav"))
@@ -57,6 +57,12 @@ class AudioManager:
     def play_correct(self):
         self.correct_chime.play()
 
+    # Incorrect chime only (no alarm)
+    def play_incorrect(self):
+        """Play just the incorrect chime immediately, without scheduling the alarm."""
+        self.incorrect_chime.play()
+        self.cancel_alarm_delay()
+
     # Incorrect chime + alarm (delayed)
     def play_incorrect_with_alarm(self, delay_ms=1200):
         # Play chime, then arm a single-shot timer for the alarm.
@@ -68,7 +74,8 @@ class AudioManager:
         except Exception:
             pass
         self.alarm_delay_timer.start(delay_ms)
-# Alarm controls
+
+    # Alarm controls
     def start_alarm(self):
         self.alarm.play()
 
