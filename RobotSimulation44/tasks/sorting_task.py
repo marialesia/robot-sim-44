@@ -1,7 +1,7 @@
 ﻿# tasks/sorting_task.py
 from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt, QTimer, QEvent
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy, QLabel
+from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation, QRect
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy, QLabel, QLabel
 from .base_task import BaseTask, StorageContainerWidget
 from .sorting_logic import SortingWorker
 from audio_manager import AudioManager
@@ -403,7 +403,7 @@ class SortingTask(BaseTask):
             if self._box_near_grip() and (self._now_ms - self._last_touch_time_ms) >= self._touch_cooldown_ms:
                 self._last_touch_time_ms = self._now_ms
 
-                # Lock color & slot at trigger time (more reliable than sampling later)
+                # Lock color & slot at trigger time
                 self._pending_color = self._color_of_box_in_window()
                 self._target_slot = self._color_to_slot(self._pending_color) if self._pending_color else None
 
@@ -425,7 +425,7 @@ class SortingTask(BaseTask):
         if self._pick_state in ("hold", "lift"):
             self._despawn_if_past_cutoff()
 
-        # segment complete -> next state (fast timings; same angles)
+        # segment complete -> next state
         if t >= 1.0:
             if self._pick_state == "to_prep":
                 self._pick_state = "descend"
@@ -434,7 +434,6 @@ class SortingTask(BaseTask):
             elif self._pick_state == "descend":
                 # --- Trigger sorting only when arm reaches box ---
                 nearest_color = self._color_of_box_in_window()
-                # play robotic arm audio
                 self.audio.play_robotic_arm()
                 if nearest_color:
                     hex_color = nearest_color.name() if hasattr(nearest_color, "name") else nearest_color
@@ -449,22 +448,21 @@ class SortingTask(BaseTask):
                     self.worker.sort_box(COLOR_MAP.get(hex_color, "unknown"))
 
                 self._pick_state = "hold"
-                # Prefer a live sample; fall back to the color we locked at trigger time
+                # Capture held box color
                 c = self._color_of_box_in_window() or self._pending_color
                 if c is not None:
                     self.arm.held_box_color = c
                     self.arm.held_box_visible = True
-                    # remember which direction to present toward
                     self._target_slot = self._color_to_slot(c)
                     self.arm.update()
-                self._start_seg(self._pose_pick(), 40)     # brief touch
+                self._start_seg(self._pose_pick(), 40)
 
             elif self._pick_state == "hold":
                 self._pick_state = "lift"
                 self._start_seg(self._pose_lift(), 120)
 
             elif self._pick_state == "lift":
-                # Prefer the worker's outcome if it has arrived (may point to a wrong bin)
+                # Still move the arm towards the target container
                 slot_to_use = self._present_slot_override or self._target_slot
                 if slot_to_use:
                     self._pick_state = "present"
@@ -476,14 +474,20 @@ class SortingTask(BaseTask):
                     self._start_seg(self._pose_home(), 160)
 
             elif self._pick_state == "present":
+                # At the moment of drop -> animate flying box
+                slot_to_use = self._present_slot_override or self._target_slot
+                if slot_to_use:
+                    target_widget = self._slot_to_widget.get(slot_to_use)
+                    if target_widget and getattr(self.arm, "held_box_color", None):
+                        self._animate_flying_box(self.arm.held_box_color, target_widget)
+
+                # Hide held box and return arm
                 self._pick_state = "return"
-                # hide the held box as we head home
                 self.arm.held_box_visible = False
                 self.arm.update()
                 self._start_seg(self._pose_home(), 200)
 
             elif self._pick_state == "return":
-                # brief idle before next box trigger
                 self._pick_state = "idle_pause"
                 self._target_slot = None
                 self._pending_color = None
@@ -576,6 +580,35 @@ class SortingTask(BaseTask):
         except ValueError:
             pass
         return random.choice(candidates) if candidates else slot
+
+
+    def _animate_flying_box(self, color, target_widget):
+        """Spawn a temporary box at the gripper and animate it flying into the container."""
+        if not target_widget:
+            return
+
+        # Create a tiny square QLabel as the flying box
+        box = QLabel(self.scene)
+        box.setStyleSheet(f"background-color: {color.name()}; border: 1px solid {color.darker(200).name()}; border-radius: 3px;")
+        box.resize(24, 24)  # same as conveyor box size
+        box.show()
+
+        # Start position: approximate gripper center in scene coords
+        arm_pos = self.arm.mapTo(self.scene, self.arm.gripper_center())
+        start_rect = QRect(int(arm_pos.x() - 12), int(arm_pos.y() - 12), 24, 28)
+
+        # End position: center of target container
+        end_pos = target_widget.mapTo(self.scene, target_widget.rect().center())
+        end_rect = QRect(end_pos.x() - 12, end_pos.y() - 12, 24, 28)
+
+        # Animate
+        anim = QPropertyAnimation(box, b"geometry", self)
+        anim.setDuration(500)
+        anim.setStartValue(start_rect)
+        anim.setEndValue(end_rect)
+        anim.finished.connect(box.deleteLater)
+        anim.start()
+
 
     # ===== Click handling / event filter =====
     def eventFilter(self, obj, event):

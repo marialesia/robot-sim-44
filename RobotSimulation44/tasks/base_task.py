@@ -1,6 +1,6 @@
 ﻿from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout
 from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
-from PyQt5.QtCore import Qt, QPointF, QRectF, QTimer, pyqtProperty
+from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, QTimer, pyqtProperty
 
 
 # --- Conveyor ---------------------------------------------------------------
@@ -189,6 +189,41 @@ class RobotArmWidget(QWidget):
         p.setBrush(QBrush(QColor(190, 190, 195))); p.setPen(Qt.NoPen)
         p.drawEllipse(QPointF(0, 0), r_inner, r_inner)
 
+    def gripper_center(self):
+        """
+        Approximate the tip position of the gripper in this widget's local coordinates.
+        Uses forward kinematics with current shoulder and elbow angles.
+        """
+        w, h = self.width(), self.height()
+        m = 10  # margin, same as in paintEvent
+
+        # Base & tower geometry
+        base_h = max(12, int(h * 0.08))
+        base_w = max(120, int(w * 0.38))
+        tower_h = max(40, int(h * 0.35))
+        tower_w = max(28, int(base_w * 0.22))
+        tower_rect_top = h - base_h - tower_h
+        origin_x = (w - base_w) / 2.0 + base_w/2.0
+        origin_y = tower_rect_top
+
+        # Arm lengths (same ratios as in paintEvent)
+        avail_up = max(30.0, origin_y - m)
+        L1, L2 = max(30.0, avail_up * 0.55), max(24.0, avail_up * 0.35)
+
+        # Angles (convert to radians)
+        import math
+        s_ang = math.radians(self.shoulder_angle)
+        e_ang = math.radians(self.elbow_angle)
+
+        # Forward kinematics
+        x1 = origin_x + L1 * math.cos(s_ang)
+        y1 = origin_y + L1 * math.sin(s_ang)
+        x2 = x1 + L2 * math.cos(s_ang + e_ang)
+        y2 = y1 + L2 * math.sin(s_ang + e_ang)
+
+        return QPoint(int(x2), int(y2))
+
+
     def paintEvent(self, e):
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height(); m = 10
@@ -236,7 +271,7 @@ class RobotArmWidget(QWidget):
             p.save()
             hb_len = 24.0 # OLD VALUE max(16.0, fL * 0.45)        # box length along the gripper
             hb_thk = 24.0 # OLD VALUE max(6.0,  arm_t * 0.55)     # box thickness between fingers
-            xc = fL * 0.55                       # position around mid-finger
+            xc = fL * 0.55                                        # position around mid-finger
             p.setPen(QPen(self.held_box_color.darker(200), 1))
             p.setBrush(QBrush(self.held_box_color))
             p.drawRoundedRect(QRectF(xc - hb_len/2, -hb_thk/2, hb_len, hb_thk), 3, 3)
