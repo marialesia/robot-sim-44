@@ -189,6 +189,13 @@ class PackagingTask(BaseTask):
         self._selected_active = False         # True when user has "picked" the bad item
         self._selected_expected = None        # 'red'|'blue'|'green' expected destination color
 
+        # --- Drag ghost for error correction ---
+        self._drag_label = None        # QLabel that follows mouse
+        self._drag_color = None        # QColor of the carried box
+        self._drag_timer = QTimer(self)
+        self._drag_timer.setInterval(16)   # ~60fps
+        self._drag_timer.timeout.connect(self._update_drag_ghost)
+
         # paint once
         self.arm.update()
         self.conveyor.update()
@@ -238,11 +245,11 @@ class PackagingTask(BaseTask):
             if rec.get("error"):
                 mis = rec.get("mis_color")
                 if mis == "red":
-                    flash_color = QColor("#e74c3c")
+                    flash_color = QColor("#8c1f15")
                 elif mis == "blue":
-                    flash_color = QColor("#3498db")
+                    flash_color = QColor("#2b4a91")
                 elif mis == "green":
-                    flash_color = QColor("#27ae60")
+                    flash_color = QColor("#1f7a3a")
                 else:
                     flash_color = QColor("#e74c3c")
 
@@ -1052,6 +1059,14 @@ class PackagingTask(BaseTask):
                 self._selected_active = True
                 self._selected_expected = front.get("mis_color")
                 self._apply_error_visuals()  # amber border on front
+
+                # --- Spawn ghost box matching expected color ---
+                if self._selected_expected:
+                    qcolor = QColor("#e74c3c") if self._selected_expected == "red" \
+                             else QColor("#3498db") if self._selected_expected == "blue" \
+                             else QColor("#27ae60")
+                    self._start_drag_box(qcolor)
+
                 try:
                     get_logger().log_user("Packaging", "container_front", "pick",
                                           f"needs={self._selected_expected}")
@@ -1069,6 +1084,7 @@ class PackagingTask(BaseTask):
         expected = self._selected_expected
         if expected is None:
             self._selected_active = False
+            self._end_drag_box()
             self._apply_error_visuals()
             return
 
@@ -1114,10 +1130,59 @@ class PackagingTask(BaseTask):
         # Reset selection/visuals
         self._selected_active = False
         self._selected_expected = None
+        self._end_drag_box()  # --- remove ghost on drop ---
         self._apply_error_visuals()
 
         if self.worker:
             self.worker.rearm_fade()
+
+
+    # --- Drag ghost helpers ---
+    def _start_drag_box(self, color: QColor):
+        """Spawn a small label that follows the mouse pointer until dropped."""
+        if self._drag_label:
+            self._drag_label.deleteLater()
+
+        lbl = QLabel(self.scene)  # keep ghost in scene so it's global
+        lbl.setStyleSheet(
+            f"background-color: {color.name()}; "
+            f"border: 1px solid {color.darker(200).name()}; "
+            "border-radius: 3px;"
+        )
+        lbl.resize(24, 24)
+        lbl.show()
+        lbl.lower()
+
+        self._drag_label = lbl
+        self._drag_color = color
+
+        from PyQt5 import QtGui
+        global_pos = QtGui.QCursor.pos()
+        scene_pos = self.scene.mapFromGlobal(global_pos)
+        w, h = lbl.width(), lbl.height()
+        lbl.move(scene_pos.x() - w // 2, scene_pos.y() - h // 2)
+
+        if not self._drag_timer.isActive():
+            self._drag_timer.start()
+
+    def _end_drag_box(self):
+        """Remove the drag label and stop following."""
+        if self._drag_timer.isActive():
+            self._drag_timer.stop()
+        if self._drag_label:
+            self._drag_label.deleteLater()
+            self._drag_label = None
+        self._drag_color = None
+
+    def _update_drag_ghost(self):
+        """Timer tick: keep ghost glued to the cursor."""
+        if not self._drag_label:
+            return
+        from PyQt5 import QtGui
+        global_pos = QtGui.QCursor.pos()
+        scene_pos = self.scene.mapFromGlobal(global_pos)
+        w, h = self._drag_label.width(), self._drag_label.height()
+        self._drag_label.move(scene_pos.x() - w // 2, scene_pos.y() - h // 2)
 
 
     def _mark_fixed_visual(self, rec):

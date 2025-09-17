@@ -676,17 +676,6 @@ class SortingTask(BaseTask):
         if not self._drag_timer.isActive():
             self._drag_timer.start(16)
 
-
-    def _update_drag_ghost(self):
-        """Timer tick: keep ghost glued to the cursor."""
-        if not self._drag_label:
-            return
-        from PyQt5 import QtGui
-        pos = self.scene.mapFromGlobal(QtGui.QCursor.pos())
-        self._drag_label.move(pos.x() - 12, pos.y() - 12)
-        self._drag_label.lower()
-
-
     def _end_drag_box(self):
         """Remove the drag label and stop following."""
         if hasattr(self, "_drag_timer") and self._drag_timer:
@@ -696,6 +685,15 @@ class SortingTask(BaseTask):
             self._drag_label.deleteLater()
             self._drag_label = None
         self._drag_color = None
+
+    def _update_drag_ghost(self):
+        """Timer tick: keep ghost glued to the cursor."""
+        if not self._drag_label:
+            return
+        from PyQt5 import QtGui
+        pos = self.scene.mapFromGlobal(QtGui.QCursor.pos())
+        self._drag_label.move(pos.x() - 12, pos.y() - 12)
+        self._drag_label.lower()
 
     # ---- badges ----
     def _create_error_badges(self):
