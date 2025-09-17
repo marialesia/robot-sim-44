@@ -34,7 +34,7 @@ class ConveyorBeltWidget(QWidget):
         self._boxes = []            # list of x positions (float)
         self._box_colors = []       # empty list for various colours of boxes
         self._box_inset = 12        # keep boxes inside belt edges
-        self._box_size = 14         # square box size in px
+        self._box_size = 24         # square box size in px
         self._box_color = QColor(200, 40, 40)
 
     # Public API --------------------------------------------------------------
@@ -234,12 +234,12 @@ class RobotArmWidget(QWidget):
         # --- Held box (drawn before fingers so grippers stay visible)
         if getattr(self, "held_box_visible", False):
             p.save()
-            hb_len = max(16.0, fL * 0.45)        # box length along the gripper
-            hb_thk = max(6.0,  arm_t * 0.55)     # box thickness between fingers
+            hb_len = 24.0 # OLD VALUE max(16.0, fL * 0.45)        # box length along the gripper
+            hb_thk = 24.0 # OLD VALUE max(6.0,  arm_t * 0.55)     # box thickness between fingers
             xc = fL * 0.55                       # position around mid-finger
-            p.setPen(QPen(self.held_box_color.darker(200), 1.5))
+            p.setPen(QPen(self.held_box_color.darker(200), 1))
             p.setBrush(QBrush(self.held_box_color))
-            p.drawRoundedRect(QRectF(xc - hb_len/2, -hb_thk/2, hb_len, hb_thk), hb_thk/4, hb_thk/4)
+            p.drawRoundedRect(QRectF(xc - hb_len/2, -hb_thk/2, hb_len, hb_thk), 3, 3)
             p.restore()
 
         # Fingers (unchanged)
