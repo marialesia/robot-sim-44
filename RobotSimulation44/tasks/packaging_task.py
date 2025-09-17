@@ -75,7 +75,7 @@ class PackagingTask(BaseTask):
 
         def _make_badge(parent_w):
             b = QLabel("!", parent_w)
-            b.setFixedSize(20, 20)
+            b.setFixedSize(40, 40)
             b.setAlignment(Qt.AlignCenter)
             b.setAttribute(Qt.WA_TransparentForMouseEvents, True)
             b.hide()
@@ -245,7 +245,7 @@ class PackagingTask(BaseTask):
             if rec.get("error"):
                 mis = rec.get("mis_color")
                 if mis == "red":
-                    flash_color = QColor("#8c1f15")
+                    flash_color = QColor("#c82828")
                 elif mis == "blue":
                     flash_color = QColor("#2b4a91")
                 elif mis == "green":
@@ -259,8 +259,8 @@ class PackagingTask(BaseTask):
                 if badge:
                     badge.setStyleSheet(
                         f"color: white; background: {flash_color.name()};"
-                        "border: 2px solid rgba(0,0,0,80); border-radius: 10px;"
-                        "font-weight: 800; font-size: 12px;"
+                        "border: 2px solid rgba(0,0,0,80); border-radius: 20px;"
+                        "font-weight: 800; font-size: 24px;"
                     )
                     badge.show()
                     self._position_badge(rec)
@@ -718,7 +718,7 @@ class PackagingTask(BaseTask):
         lbl.show()
 
         badge = QLabel("!", w)
-        badge.setFixedSize(20, 20)
+        badge.setFixedSize(40, 40)
         badge.setAlignment(Qt.AlignCenter)
         badge.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         badge.hide()

@@ -536,12 +536,12 @@ class InspectionTask(BaseTask):
     def _create_error_badges(self):
         for slot, w in self._slot_to_widget.items():
             lbl = QLabel("!", w)
-            lbl.setFixedSize(22, 22)
+            lbl.setFixedSize(40, 40)
             lbl.setAlignment(Qt.AlignCenter)
             lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
             lbl.setStyleSheet(
-                "color: white; background: rgba(0,0,0,0); border-radius: 11px; "
-                "font-weight: 800; font-size: 14px;"
+                "color: white; background: rgba(0,0,0,0); border-radius: 20px; "
+                "font-weight: 800; font-size: 24px;"
             )
             lbl.hide()
             self._badges[slot] = lbl
@@ -578,7 +578,7 @@ class InspectionTask(BaseTask):
                                 "color: white; "
                                 f"background: {q.name()}; "
                                 f"border: 2px solid {q.darker(130).name()}; "
-                                "border-radius: 11px; font-weight: 800; font-size: 14px;"
+                                "border-radius: 20px; font-weight: 800; font-size: 24px;"
                             )
                             badge.show()
             else:
