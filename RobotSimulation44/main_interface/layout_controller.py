@@ -75,9 +75,9 @@ class LayoutController:
         path = get_logger().dump_csv()
         if self.status_label:
             if path:
-                self.status_label.setText(f"Paused. Log saved to: {path}")
+                self.status_label.setText(f"Complete. Log saved to: {path}")
             else:
-                self.status_label.setText("Paused. (No events to log.)")
+                self.status_label.setText("Complete. (No events to log.)")
 
     def stop_tasks(self):
         """Stop all tasks that have a 'stop' method', then write CSV log."""

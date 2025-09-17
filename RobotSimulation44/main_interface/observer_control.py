@@ -42,7 +42,7 @@ class ObserverControl(QObject):
         self.time_limit_input.setPlaceholderText("Time Limit")
         self.time_limit_input.setFixedWidth(70)
         button_row.addWidget(self.start_button)
-        button_row.addWidget(self.pause_button)
+        # button_row.addWidget(self.pause_button)
         button_row.addWidget(self.stop_button)
         button_row.addWidget(self.save_button)
         button_row.addWidget(self.load_button)
@@ -305,7 +305,7 @@ class ObserverControl(QObject):
 
                 if total_seconds >= time_limit_seconds:
                     self.stop_timer()
-                    self.stop_pressed.emit()
+                    self.pause_pressed.emit()
                     get_logger().log_user("ObserverControl", "Session Timer", "stop", "Time limit reached, tasks stopped")
 
                     # Flash red
@@ -412,7 +412,7 @@ class ObserverControl(QObject):
             else:
                 # just minutes entered
                 m, s = int(text), 0
-            m = max(0, min(m, 99))  # clamp minutes to 0–99
+            m = max(0, min(m, 99))  # clamp minutes to 0-99
             s = max(0, min(s, 59))  # clamp seconds
             self.time_limit_input.setText(f"{m:02}:{s:02}")
         except ValueError:

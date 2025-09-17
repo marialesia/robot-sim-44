@@ -276,7 +276,9 @@ class SortingTask(BaseTask):
                 self.worker.start()
 
     def pause(self):
+        # ===== stop motions =====
         self.conveyor.enable_motion(False)
+
         if self._box_timer.isActive():
             self._box_timer.stop()
         if self._pick_timer.isActive():
@@ -288,6 +290,13 @@ class SortingTask(BaseTask):
         self.audio.stop_conveyor()
         self.audio.stop_alarm()
 
+        # ===== clear all boxes from the conveyor =====
+        if hasattr(self.conveyor, "_boxes"):
+            self.conveyor._boxes.clear()
+        if hasattr(self.conveyor, "_box_colors"):
+            self.conveyor._box_colors.clear()
+        self.conveyor.update()
+
         # reset borders and hide badges
         for slot, w in self._slot_to_widget.items():
             w.border = self._orig_borders.get(slot, w.border)
@@ -298,7 +307,6 @@ class SortingTask(BaseTask):
         # return arm to home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
-        # clear any held-box visual on pause
         self.arm.held_box_visible = False
         self.arm.update()
 
@@ -308,9 +316,10 @@ class SortingTask(BaseTask):
                 self._highlight_bin(slot, False)
             self._selected_error = None
 
-        # ===== pause the worker logic =====
+        # ===== stop worker logic =====
         if self.worker and self.worker.isRunning():
-            self.worker.pause()
+            self.worker.stop()
+            self.worker = None   # fully drop it so we must re-create on start
 
     def stop(self):
         # ===== stop motions =====
@@ -358,9 +367,9 @@ class SortingTask(BaseTask):
             self.worker.stop()
             self.worker = None   # fully drop it so we must re-create on start
 
-        # ===== reset metrics (optional) =====
-        # if hasattr(self, "metrics_manager"):
-        #     self.metrics_manager.reset_metrics()
+        # ===== reset metrics =====
+        if hasattr(self, "metrics_manager"):
+            self.metrics_manager.reset_metrics()
 
 
     # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> present -> return) ----------

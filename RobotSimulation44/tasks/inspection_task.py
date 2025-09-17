@@ -198,6 +198,12 @@ class InspectionTask(BaseTask):
         self.audio.stop_alarm()
         self.audio.stop_conveyor()
 
+        if hasattr(self.conveyor, "_boxes"):
+            self.conveyor._boxes.clear()
+        if hasattr(self.conveyor, "_box_colors"):
+            self.conveyor._box_colors.clear()
+        self.conveyor.update()
+
         for slot, w in self._slot_to_widget.items():
             w.border = self._orig_borders.get(slot, w.border)
             w.update()
@@ -215,7 +221,8 @@ class InspectionTask(BaseTask):
             self._selected_error = None
 
         if self.worker and self.worker.isRunning():
-            self.worker.pause()
+            self.worker.stop()
+            self.worker = None
 
     def stop(self):
         self.conveyor.enable_motion(False)
@@ -254,6 +261,9 @@ class InspectionTask(BaseTask):
         if self.worker and self.worker.isRunning():
             self.worker.stop()
             self.worker = None
+
+        if hasattr(self, "metrics_manager"):
+            self.metrics_manager.reset_metrics()
 
     # ---------- Arm path ----------
     def _pose_home(self):

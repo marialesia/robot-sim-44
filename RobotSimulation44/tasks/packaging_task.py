@@ -853,6 +853,46 @@ class PackagingTask(BaseTask):
         except Exception:
             pass
 
+    def pause(self):
+        self.conveyor.enable_motion(False)
+        if self._box_timer.isActive():
+            self._box_timer.stop()
+        if self._pick_timer.isActive():
+            self._pick_timer.stop()
+
+        if hasattr(self, "worker") and self.worker and self.worker.isRunning():
+            self.worker.stop()
+            self.worker.wait(500)
+
+        if self._flash_timer.isActive():
+            self._flash_timer.stop()
+        self._flash_on = False
+
+        self._selected_active = False
+        self._selected_expected = None
+        self._batch_active = False
+        self._batch_remaining = 0
+        self._batch_color = None
+
+        if hasattr(self.conveyor, "_boxes"):
+            self.conveyor._boxes.clear()
+        if hasattr(self.conveyor, "_box_colors"):
+            self.conveyor._box_colors.clear()
+        self.conveyor.update()
+
+        try:
+            self.audio.stop_conveyor()
+            self.audio.stop_alarm()
+            self.audio.cancel_alarm_delay()
+        except Exception:
+            pass
+        self._alarm_active = False
+
+        sh, el = self._pose_home()
+        self._set_arm(sh, el)
+        self.arm.held_box_visible = False
+        self.arm.update()
+
     def stop(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
@@ -875,6 +915,13 @@ class PackagingTask(BaseTask):
         self._batch_remaining = 0
         self._batch_color = None
 
+        #  clear all boxes from the conveyor 
+        if hasattr(self.conveyor, "_boxes"):
+            self.conveyor._boxes.clear()
+        if hasattr(self.conveyor, "_box_colors"):
+            self.conveyor._box_colors.clear()
+        self.conveyor.update()
+
         # stop audios
         try:
             self.audio.stop_conveyor()
@@ -893,6 +940,10 @@ class PackagingTask(BaseTask):
             get_logger().log_user("Packaging", "control", "stop", "stopped by user")
         except Exception:
             pass
+
+        # ===== reset metrics =====
+        if hasattr(self, "metrics_manager"):
+            self.metrics_manager.reset_metrics()
 
     def _on_metrics(self, metrics):
         try:
