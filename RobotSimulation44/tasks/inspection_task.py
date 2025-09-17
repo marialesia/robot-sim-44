@@ -81,6 +81,13 @@ class InspectionTask(BaseTask):
             "red":   QColor("#c82828"),
         }
 
+        # --- Drag ghost for error correction ---
+        self._drag_label = None        # QLabel that follows mouse
+        self._drag_color = None        # QColor of the carried box
+        self._drag_timer = QTimer(self)
+        self._drag_timer.setInterval(16)   # ~60fps
+        self._drag_timer.timeout.connect(self._update_drag_ghost)
+
         # Badges
         self._badges = {}
         self._create_error_badges()
@@ -480,6 +487,51 @@ class InspectionTask(BaseTask):
         rec = self._errors.get(self._selected_error)
         return rec['current'] if rec else None
 
+
+    # --- Drag ghost helpers ---
+    def _start_drag_box(self, color: QColor):
+        """Spawn a small label that follows the mouse pointer until dropped."""
+        if self._drag_label:
+            self._drag_label.deleteLater()
+
+        lbl = QLabel(self.scene)
+        lbl.setStyleSheet(
+            f"background-color: {color.name()}; "
+            f"border: 1px solid {color.darker(200).name()}; "
+            "border-radius: 3px;"
+        )
+        lbl.resize(24, 24)
+        lbl.show()
+        lbl.lower()  # keep behind containers
+
+        self._drag_label = lbl
+        self._drag_color = color
+
+        from PyQt5 import QtGui
+        pos = self.scene.mapFromGlobal(QtGui.QCursor.pos())
+        lbl.move(pos.x() - 12, pos.y() - 12)
+
+        if not self._drag_timer.isActive():
+            self._drag_timer.start()
+
+    def _end_drag_box(self):
+        """Remove the drag label and stop following."""
+        if self._drag_timer.isActive():
+            self._drag_timer.stop()
+        if self._drag_label:
+            self._drag_label.deleteLater()
+            self._drag_label = None
+        self._drag_color = None
+
+    def _update_drag_ghost(self):
+        """Timer tick: keep ghost glued to the cursor."""
+        if not self._drag_label:
+            return
+        from PyQt5 import QtGui
+        pos = self.scene.mapFromGlobal(QtGui.QCursor.pos())
+        self._drag_label.move(pos.x() - 12, pos.y() - 12)
+
+
     # ---- badges ----
     def _create_error_badges(self):
         for slot, w in self._slot_to_widget.items():
@@ -558,11 +610,11 @@ class InspectionTask(BaseTask):
     def _on_container_clicked(self, slot):
         get_logger().log_user("Inspection", f"container_{slot}", "click", "container clicked")
 
+        # === CASE 1: Pick from bin ===
         if self._selected_error is None:
             ids = self._bin_errors.get(slot, [])
             if not ids:
                 print(f"(Inspection Task: No errors in {slot} to pick up)")
-                get_logger().log_user("Inspection", f"container_{slot}", "click", "no errors to pick up")
                 return
 
             eid = ids.pop(0)
@@ -572,19 +624,23 @@ class InspectionTask(BaseTask):
 
             self._selected_error = eid
             self._highlight_bin(slot, True)
-            msg = (f"Inspection Task: Picked error #{eid}: {rec['color']} currently in {slot}. "
-                   f"Click the correct container ({rec['actual']}).")
-            print(msg)
-            get_logger().log_user("Inspection", f"container_{slot}", "pick",
-                                  f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
+            print(f"Inspection Task: Picked error #{eid}: {rec['color']} currently in {slot}. "
+                  f"Click the correct container ({rec['actual']}).")
+
+            # Spawn ghost box
+            q = self._slot_color_map.get(rec['color'])
+            if q:
+                self._start_drag_box(q)
 
             self._apply_flash_colors()
             return
 
+        # === CASE 2: Drop into bin ===
         eid = self._selected_error
         rec = self._errors.get(eid)
         if not rec:
             self._selected_error = None
+            self._end_drag_box()
             self._apply_flash_colors()
             return
 
@@ -604,43 +660,26 @@ class InspectionTask(BaseTask):
         if new_slot == rec['actual']:
             self._correct_corrections += 1
             self._error_start_times.pop(eid, None)
-
             print(f"Inspection Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
-            get_logger().log_user("Inspection", f"container_{new_slot}", "drop",
-                                  f"resolved eid={eid}, color={rec['color']}")
-            try:
-                if eid in self._bin_errors.get(new_slot, []):
-                    self._bin_errors[new_slot].remove(eid)
-            except ValueError:
-                pass
             if eid in self._errors:
                 del self._errors[eid]
-
             self.audio.play_correct()
-
             if not self._errors and self._alarm_active:
                 self.audio.stop_alarm()
                 self._alarm_active = False
-
         else:
             self._error_start_times.pop(eid, None)
-
             print(f"Inspection Task: Error #{eid} placed incorrectly in {new_slot} and cleared (was {rec['actual']})")
-            get_logger().log_user("Inspection", f"container_{new_slot}", "drop",
-                                  f"final incorrect eid={eid}, expected={rec['actual']}")
-
-            try:
-                if eid in self._bin_errors.get(new_slot, []):
-                    self._bin_errors[new_slot].remove(eid)
-            except ValueError:
-                pass
             if eid in self._errors:
                 del self._errors[eid]
-
             self.audio.play_incorrect()
 
+        # End drag + deselect
         self._selected_error = None
+        self._end_drag_box()
+
         self._apply_flash_colors()
+
 
     # ===== Worker signal handlers =====
     def spawn_box_from_worker(self, box_data):
