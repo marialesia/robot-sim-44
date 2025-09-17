@@ -1,4 +1,5 @@
 
+from PyQt5 import QtCore
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation
 from PyQt5.QtWidgets import QLabel, QGraphicsOpacityEffect, QHBoxLayout, QSizePolicy, QWidget
@@ -444,6 +445,35 @@ class PackagingTask(BaseTask):
         else:
             if self.worker:
                 self.worker.rearm_fade()
+    
+    def _animate_flying_box(self, color, target_widget):
+        """Spawn a temporary box at the gripper and animate it flying into the container."""
+        if not target_widget:
+            return
+
+        box = QLabel(self.scene)
+        box.setStyleSheet(
+            f"background-color: {color.name()}; "
+            f"border: 1px solid {color.darker(200).name()}; "
+            "border-radius: 3px;"
+        )
+        box.resize(24, 24)  # same as conveyor box size
+        box.show()
+
+        # Start at gripper center
+        arm_pos = self.arm.mapTo(self.scene, self.arm.gripper_center())
+        start_rect = QtCore.QRect(int(arm_pos.x() - 12), int(arm_pos.y() - 12), 24, 28)
+
+        # End at target container center
+        end_pos = target_widget.mapTo(self.scene, target_widget.rect().center())
+        end_rect = QtCore.QRect(end_pos.x() - 12, end_pos.y() - 12, 24, 28)
+
+        anim = QPropertyAnimation(box, b"geometry", self)
+        anim.setDuration(500)
+        anim.setStartValue(start_rect)
+        anim.setEndValue(end_rect)
+        anim.finished.connect(box.deleteLater)
+        anim.start()
 
     # ---------- Packing count & new error detection ----------
     def _on_item_packed(self):
@@ -466,6 +496,11 @@ class PackagingTask(BaseTask):
         # increment front container count
         active["count"] += 1
         self._update_label(active)
+
+        # Animate flying box into the active container
+        target_widget = active["widget"]
+        if getattr(self.arm, "held_box_color", None):
+            self._animate_flying_box(self.arm.held_box_color, target_widget)
         try:
             get_logger().log_robot("Packaging", f"pack {active['count']}/{active['capacity']} color={packed_color}")
         except Exception:
