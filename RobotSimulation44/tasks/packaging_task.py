@@ -147,6 +147,10 @@ class PackagingTask(BaseTask):
 
         self.grid.addWidget(self._row, 1, 0, 1, 2, Qt.AlignRight | Qt.AlignBottom)
 
+        # For Sorting correction accuracy
+        self._total_corrections = 0
+        self._correct_corrections = 0
+
         # ===== Spawner / worker =====
         self.worker = None
 
@@ -545,7 +549,10 @@ class PackagingTask(BaseTask):
                 pass
 
         if self.worker:
-            self.worker.record_pack()
+            is_error = (packed_color is not None and 
+                active_color is not None and 
+                (packed_color != active_color))
+            self.worker.record_pack(is_error=is_error)
 
         # Fade condition: always fade once capacity reached, even if error == True
         if self._should_fade_current or (active["count"] >= active["capacity"] > 0):
@@ -1095,8 +1102,11 @@ class PackagingTask(BaseTask):
         clicked_rec["count"] += 1
         self._update_label(clicked_rec)
 
+        self._total_corrections += 1
+
         if target_color == expected:
             # Correct drop: clear error
+            self._correct_corrections += 1
             front["error"] = False
             front["fixed"] = True
             front["mis_color"] = None
@@ -1208,6 +1218,12 @@ class PackagingTask(BaseTask):
 
     def _on_metrics_live(self, metrics):
         if hasattr(self, "metrics_manager") and self.metrics_manager:
+            if self._total_corrections > 0:
+                metrics['pack_correction_rate'] = (self._correct_corrections / self._total_corrections) * 100
+            else:
+                metrics['pack_correction_rate'] = 0.0
+            
             self.metrics_manager.update_metrics(metrics)
         else:
+            # fallback for debugging
             print("Live metrics:", metrics)

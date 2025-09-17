@@ -88,13 +88,18 @@ class PackagingWorker(QThread):
         if color:
             self._cur_color = str(color)
 
-    def record_pack(self):
+    def record_pack(self, is_error=False):
         """
         Called by UI each time an item is packed into the active container.
         We maintain metrics and *suggest* a fade when count reaches capacity.
         """
         self._cur_count += 1
         self.total += 1
+
+        if is_error:
+            self.errors += 1
+        else:
+            self.correct += 1
 
         # We don't know the box color here; let the UI decide correctness.
         # Keep live throughput style metrics only.
