@@ -117,6 +117,13 @@ class SortingTask(BaseTask):
             w._slot = slot  # tag widget for click handling
             w.installEventFilter(self)
 
+        # --- Drag ghost for error correction ---
+        self._drag_label = None        # QLabel that follows mouse
+        self._drag_color = None        # QColor of the carried box
+        self._drag_timer = QTimer(self)
+        self._drag_timer.setInterval(16)   # ~60fps
+        self._drag_timer.timeout.connect(self._update_drag_ghost)
+
         # --- Error move model ---
         self._errors = {}                                # id -> {id,color,actual,current}
         self._bin_errors = {k: [] for k in self._slot_to_widget.keys()}  # slot -> [ids]
@@ -641,6 +648,55 @@ class SortingTask(BaseTask):
         rec = self._errors.get(self._selected_error)
         return rec['current'] if rec else None
 
+        # --- Drag ghost helpers ---
+    def _start_drag_box(self, color: QColor):
+        """Spawn a ghost box inside the scene, behind the containers."""
+        if self._drag_label:
+            self._drag_label.deleteLater()
+
+        lbl = QLabel(self.scene)  # parent is the scene
+        lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        lbl.setStyleSheet(
+            f"background-color: {color.name()}; "
+            f"border: 1px solid {color.darker(200).name()}; "
+            "border-radius: 3px;"
+        )
+        lbl.resize(24, 24)
+        lbl.show()
+        lbl.lower()
+
+        self._drag_label = lbl
+        self._drag_color = color
+
+        # Position immediately at cursor (scene coordinates!)
+        from PyQt5 import QtGui
+        pos = self.scene.mapFromGlobal(QtGui.QCursor.pos())
+        lbl.move(pos.x() - 12, pos.y() - 12)
+
+        if not self._drag_timer.isActive():
+            self._drag_timer.start(16)
+
+
+    def _update_drag_ghost(self):
+        """Timer tick: keep ghost glued to the cursor."""
+        if not self._drag_label:
+            return
+        from PyQt5 import QtGui
+        pos = self.scene.mapFromGlobal(QtGui.QCursor.pos())
+        self._drag_label.move(pos.x() - 12, pos.y() - 12)
+        self._drag_label.lower()
+
+
+    def _end_drag_box(self):
+        """Remove the drag label and stop following."""
+        if hasattr(self, "_drag_timer") and self._drag_timer:
+            if self._drag_timer.isActive():
+                self._drag_timer.stop()
+        if hasattr(self, "_drag_label") and self._drag_label:
+            self._drag_label.deleteLater()
+            self._drag_label = None
+        self._drag_color = None
+
     # ---- badges ----
     def _create_error_badges(self):
         """Create a small colored '!' badge for each bin (initially hidden)."""
@@ -756,7 +812,10 @@ class SortingTask(BaseTask):
             get_logger().log_user("Sorting", f"container_{slot}", "pick",
                                   f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
 
-            # No chime here (only when actually resolved)
+            # Spawn ghost box
+            q = self._slot_color_map.get(rec['color'])
+            if q:
+                self._start_drag_box(q)
 
             # Update flashing/badges immediately (selected bin stops flashing)
             self._apply_flash_colors()
@@ -767,6 +826,7 @@ class SortingTask(BaseTask):
         rec = self._errors.get(eid)
         if not rec:
             self._selected_error = None
+            self._end_drag_box()
             self._apply_flash_colors()
             return
 
@@ -828,6 +888,9 @@ class SortingTask(BaseTask):
 
         # In either case, deselect after the drop
         self._selected_error = None
+
+        # Always clear ghost after drop
+        self._end_drag_box()
 
         # Stop alarm if no errors remain
         try:
