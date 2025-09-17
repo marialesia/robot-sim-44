@@ -599,6 +599,7 @@ class SortingTask(BaseTask):
         box.setStyleSheet(f"background-color: {color.name()}; border: 1px solid {color.darker(200).name()}; border-radius: 3px;")
         box.resize(24, 24)  # same as conveyor box size
         box.show()
+        box.lower() 
 
         # Start position: approximate gripper center in scene coords
         arm_pos = self.arm.mapTo(self.scene, self.arm.gripper_center())

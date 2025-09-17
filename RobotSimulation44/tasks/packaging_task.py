@@ -470,6 +470,7 @@ class PackagingTask(BaseTask):
         )
         box.resize(24, 24)  # same as conveyor box size
         box.show()
+        box.lower() 
 
         # Start at gripper center
         arm_pos = self.arm.mapTo(self.scene, self.arm.gripper_center())
