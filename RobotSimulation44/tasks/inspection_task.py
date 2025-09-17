@@ -1,6 +1,6 @@
 # tasks/inspection_task.py
 from PyQt5.QtGui import QColor
-from PyQt5.QtCore import Qt, QTimer, QEvent
+from PyQt5.QtCore import Qt, QTimer, QEvent, QPropertyAnimation, QRect
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy, QLabel
 from .base_task import BaseTask, StorageContainerWidget
 from .inspection_logic import InspectionWorker
@@ -343,6 +343,13 @@ class InspectionTask(BaseTask):
                     self._start_seg(self._pose_home(), 160)
 
             elif self._pick_state == "present":
+                # Animate flying box at the moment of drop
+                slot_to_use = self._present_slot_override or self._target_slot
+                if slot_to_use:
+                    target_widget = self._slot_to_widget.get(slot_to_use)
+                    if target_widget and getattr(self.arm, "held_box_color", None):
+                        self._animate_flying_box(self.arm.held_box_color, target_widget)
+
                 self._pick_state = "return"
                 self.arm.held_box_visible = False
                 self.arm.update()
@@ -414,6 +421,35 @@ class InspectionTask(BaseTask):
         if key == "#1f7a3a":
             return "green"
         return "green"
+
+    def _animate_flying_box(self, color, target_widget):
+        """Spawn a temporary box at the gripper and animate it flying into the container."""
+        if not target_widget:
+            return
+
+        box = QLabel(self.scene)
+        box.setStyleSheet(
+            f"background-color: {color.name()}; "
+            f"border: 1px solid {color.darker(200).name()}; "
+            "border-radius: 3px;"
+        )
+        box.resize(24, 24)  # same as conveyor box size
+        box.show()
+
+        # Start at gripper center
+        arm_pos = self.arm.mapTo(self.scene, self.arm.gripper_center())
+        start_rect = QRect(int(arm_pos.x() - 12), int(arm_pos.y() - 12), 24, 28)
+
+        # End at target container center
+        end_pos = target_widget.mapTo(self.scene, target_widget.rect().center())
+        end_rect = QRect(end_pos.x() - 12, end_pos.y() - 12, 24, 28)
+
+        anim = QPropertyAnimation(box, b"geometry", self)
+        anim.setDuration(500)
+        anim.setStartValue(start_rect)
+        anim.setEndValue(end_rect)
+        anim.finished.connect(box.deleteLater)
+        anim.start()
 
     # ===== Click handling =====
     def eventFilter(self, obj, event):
