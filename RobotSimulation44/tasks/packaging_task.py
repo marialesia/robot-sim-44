@@ -1290,9 +1290,10 @@ class PackagingTask(BaseTask):
         if hasattr(self, "metrics_manager") and self.metrics_manager:
             if self._total_corrections > 0:
                 metrics['pack_correction_rate'] = (self._correct_corrections / self._total_corrections) * 100
+                metrics['pack_corrections'] = self._correct_corrections
             else:
                 metrics['pack_correction_rate'] = 0.0
-
+                metrics['pack_corrections'] = 0
             self.metrics_manager.update_metrics(metrics)
 
         # --- Log 3 core metrics every update ---

@@ -985,8 +985,10 @@ class SortingTask(BaseTask):
             # Update metrics manager as before
             if self._total_corrections > 0:
                 metrics['sort_correction_rate'] = (self._correct_corrections / self._total_corrections) * 100
+                metrics['sort_corrections'] = self._correct_corrections
             else:
                 metrics['sort_correction_rate'] = 0.0
+                metrics['sort_corrections'] = 0
             self.metrics_manager.update_metrics(metrics)
 
         # --- log 3 core metrics every update ---

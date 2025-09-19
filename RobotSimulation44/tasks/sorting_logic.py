@@ -33,7 +33,7 @@ class SortingWorker(QThread):
         elif bin_count == 2:
             self.colors = ["green", "purple"]
         else:
-            # fallback (shouldn’t really happen)
+            # fallback (shouldnï¿½t really happen)
             self.colors = ["red", "blue", "green", "purple", "orange", "teal"]
 
 
