@@ -93,7 +93,7 @@ class PackagingWorker(QThread):
         if color:
             self._cur_color = str(color)
 
-    def record_pack(self, is_error=False):
+    def record_pack(self, is_error):
         """
         Called by UI each time an item is packed into the active container.
         We maintain metrics and *suggest* a fade when count reaches capacity.

@@ -551,7 +551,7 @@ class PackagingTask(BaseTask):
             is_error = (packed_color is not None and 
                         active_color is not None and 
                         (packed_color != active_color))
-            self.worker.record_pack(is_error=is_error)
+            self.worker.record_pack(is_error)
 
         # Fade condition
         if self._should_fade_current or (active["count"] >= active["capacity"] > 0):
