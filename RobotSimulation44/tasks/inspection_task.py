@@ -14,10 +14,11 @@ class InspectionTask(BaseTask):
     def __init__(self):
         super().__init__(task_name="Inspection")
 
-        # ---- Robot arm visuals (same style as before) ----
+        # ---- Robot arm visuals ----
         self.arm.shoulder_angle = -90
         self.arm.elbow_angle = -0
-        self.arm.c_arm = QColor("#2e86c1")
+        self.arm.c_arm = QColor("#27ae60")       # main green
+        self.arm.c_arm_dark = QColor("#1e8449")  # darker accent green
 
         # ---- Two containers: LEFT=green (built-in), RIGHT=red ----
         self.container_green = self.container
@@ -384,7 +385,7 @@ class InspectionTask(BaseTask):
 
     # ---------- helpers ----------
     def _grip_x(self):
-        return self.conveyor.width() * 0.40
+        return self.conveyor.width() * 0.44 # Change this value to increate/decrease the position where the robot arm picks up a box
 
     def _box_near_grip(self):
         boxes = getattr(self.conveyor, "_boxes", None)

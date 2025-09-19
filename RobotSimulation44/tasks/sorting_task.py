@@ -527,7 +527,7 @@ class SortingTask(BaseTask):
     # ---------- helpers ----------
     def _grip_x(self):
         """Single source of truth for the gripper's detection X (edit here to shift detection)."""
-        return self.conveyor.width() * 0.40
+        return self.conveyor.width() * 0.44 # Change this value to increate/decrease the position where the robot arm picks up a box
 
     def _box_near_grip(self):
         """Detection-only: True if any box is within the window around the gripper."""

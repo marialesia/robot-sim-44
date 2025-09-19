@@ -1040,7 +1040,7 @@ class PackagingTask(BaseTask):
 
     # ---------- Belt/box helpers ----------
     def _grip_x(self):
-        return self.conveyor.width() * 0.40
+        return self.conveyor.width() * 0.44 # Change this value to increate/decrease the position where the robot arm picks up a box
 
     def _box_near_grip(self):
         boxes = getattr(self.conveyor, "_boxes", None)

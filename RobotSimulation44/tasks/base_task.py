@@ -355,7 +355,7 @@ class BaseTask(QWidget):
         )
         outer.addWidget(title)
 
-        # Optional: soft glow effect on title
+        # Soft glow effect on title
         from PyQt5.QtWidgets import QGraphicsDropShadowEffect
         glow = QGraphicsDropShadowEffect(self)
         glow.setBlurRadius(12)
@@ -366,13 +366,23 @@ class BaseTask(QWidget):
         # --- Modern scene frame ---
         self.scene = QFrame()
         self.scene.setObjectName("warehouseScene")
+
+        # Dynamic border colors per task
+        task_borders = {
+            "Sorting": "#3f88ff",     # bright blue
+            "Packaging": "#8e44ad",   # purple
+            "Inspection": "#27ae60",  # green
+        }
+        border_color = task_borders.get(task_name, "#888")  # fallback grey
+
         self.scene.setStyleSheet(
-            "#warehouseScene { "
-            "border: 1px solid #222; "
-            "border-radius: 10px; "
+            f"#warehouseScene {{ "
+            f"border: 3px solid {border_color}; "
+            "border-radius: 12px; "
             "background-color: #1b1f2a;"  # dark navy background
             "}"
         )
+
         self.scene.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.scene.setMinimumSize(1200, 350)
         outer.addWidget(self.scene)
@@ -443,3 +453,4 @@ class BaseTask(QWidget):
         if isinstance(margins, (list, tuple)) and len(margins) == 4:
             l, t, r, b = margins
             self.grid.setContentsMargins(int(l), int(t), int(r), int(b))
+
