@@ -76,8 +76,13 @@ class PackagingWorker(QThread):
         self.running = False
 
     @staticmethod
-    def pick_capacity():
-        return random.choice((4, 5, 6))
+    def pick_capacity(limit="4 - 6"):
+        if limit == "6":
+            return 6
+        elif limit == "5 - 6":
+            return random.choice((5, 6))
+        else:  # "4 - 6"
+            return random.choice((4, 5, 6))
 
     def begin_container(self, capacity: int, color: str = None):
         """UI tells us a fresh leftmost container is active (and its color)."""

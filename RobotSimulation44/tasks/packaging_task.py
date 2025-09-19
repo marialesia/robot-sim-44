@@ -764,7 +764,7 @@ class PackagingTask(BaseTask):
         self._schedule_batch_for_front()
 
     # ---------- Lifecycle ----------
-    def start(self, pace=None, error_rate=None):
+    def start(self, pace=None, error_rate=None, limit="4 - 6"):
         # --- Guard: only run if this task is enabled ---
         if not getattr(self, "enabled", True):
             return
@@ -787,6 +787,7 @@ class PackagingTask(BaseTask):
 
         if not self.worker or not self.worker.isRunning():
             self.worker = PackagingWorker(pace=pace, error_rate=error_rate)
+            self.worker.limit = limit  # <-- store selected limit on worker
             self.worker.box_spawned.connect(self.spawn_box_from_worker)
             self.worker.metrics_ready.connect(self._on_metrics)
             self.worker.container_should_fade.connect(self._on_worker_fade)
@@ -796,7 +797,7 @@ class PackagingTask(BaseTask):
         # reset counts/caps (colors remain fixed per rotation)
         for rec in self._containers:
             rec["count"] = 0
-            rec["capacity"] = PackagingWorker.pick_capacity()
+            rec["capacity"] = PackagingWorker.pick_capacity(limit)  # <-- use chosen limit
             rec["error"] = False
             rec["fixed"] = False
             rec["err_start"] = None
@@ -852,7 +853,12 @@ class PackagingTask(BaseTask):
             pass
 
         try:
-            get_logger().log_user("Packaging", "control", "start", f"pace={pace},error_rate={error_rate}")
+            get_logger().log_user(
+                "Packaging",
+                "control",
+                "start",
+                f"pace={pace},error_rate={error_rate},limit={limit}"
+            )
         except Exception:
             pass
 

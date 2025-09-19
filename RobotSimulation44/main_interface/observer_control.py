@@ -136,10 +136,10 @@ class ObserverControl(QObject):
         self.pack_pace_dropdown.addItems(["slow", "medium", "fast"])
         packaging_layout.addWidget(self.pack_pace_dropdown)
 
-        # packaging_layout.addWidget(QLabel("Bins:"))
-        # self.pack_bin_dropdown = QComboBox()
-        # self.pack_bin_dropdown.addItems(["2", "4", "6"])
-        # packaging_layout.addWidget(self.pack_bin_dropdown)
+        packaging_layout.addWidget(QLabel("Limit:"))
+        self.pack_limit_dropdown = QComboBox()
+        self.pack_limit_dropdown.addItems(["6", "5 - 6", "4 - 6"])
+        packaging_layout.addWidget(self.pack_limit_dropdown)
 
         packaging_layout.addWidget(QLabel("Error Rate:"))
         self.pack_error_slider, self.pack_error_input, slider_layout = create_slider_with_input()
@@ -238,6 +238,9 @@ class ObserverControl(QObject):
     def get_pack_pace(self):
         return self.pack_pace_dropdown.currentText()
 
+    def get_pack_limit(self):
+        return self.pack_limit_dropdown.currentText()
+
     def get_pack_error_rate(self):
         return self.pack_error_slider.value() / 100.0
 
@@ -261,6 +264,7 @@ class ObserverControl(QObject):
             return {
                 "pace": self.get_pack_pace(),
                 "error_rate": self.get_pack_error_rate(),
+                "limit": self.get_pack_limit(),
             }
         elif task_name == "inspection":
             # return inspection-specific params
