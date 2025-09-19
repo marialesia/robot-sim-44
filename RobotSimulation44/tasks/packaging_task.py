@@ -376,7 +376,7 @@ class PackagingTask(BaseTask):
 
         if not self._box_timer.isActive():
             self._box_timer.start()
-
+        
         try:
             get_logger().log_robot(
                 "Packaging",
@@ -1274,8 +1274,16 @@ class PackagingTask(BaseTask):
                 metrics['pack_correction_rate'] = (self._correct_corrections / self._total_corrections) * 100
             else:
                 metrics['pack_correction_rate'] = 0.0
-            
+
             self.metrics_manager.update_metrics(metrics)
-        else:
-            # fallback for debugging
-            print("Live metrics:", metrics)
+
+        # --- NEW: log 3 core metrics every update ---
+        oc = getattr(self, "observer_control", None)  # injected from LayoutController
+        if oc:
+            ts = oc.get_timestamp()  # MM:SS from ObserverControl timer
+            logger = get_logger()
+
+            logger.log_metric(ts, "packaging", "boxes packed", metrics.get("pack_total", 0))
+            logger.log_metric(ts, "packaging", "errors", metrics.get("pack_errors", 0))
+            logger.log_metric(ts, "packaging", "errors corrected", self._correct_corrections)
+

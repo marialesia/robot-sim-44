@@ -796,14 +796,14 @@ class SortingTask(BaseTask):
 
     def _on_container_clicked(self, slot):
         # Always log the user click
-        get_logger().log_user("Sorting", f"container_{slot}", "click", "container clicked")
+        # get_logger().log_user("Sorting", f"container_{slot}", "click", "container clicked")
 
         # === CASE 1: Not holding anything, attempt to PICK from this bin ===
         if self._selected_error is None:
             ids = self._bin_errors.get(slot, [])
             if not ids:
                 print(f"(Sorting Task: No errors in {slot} to pick up)")
-                get_logger().log_user("Sorting", f"container_{slot}", "click", "no errors to pick up")
+                # get_logger().log_user("Sorting", f"container_{slot}", "click", "no errors to pick up")
                 return
 
             # FIFO pick one error from the clicked bin
@@ -817,8 +817,8 @@ class SortingTask(BaseTask):
             msg = (f"Sorting Task: Picked error #{eid}: {rec['color']} currently in {slot}. "
                    f"Click the correct container ({rec['actual']}).")
             print(msg)
-            get_logger().log_user("Sorting", f"container_{slot}", "pick",
-                                  f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
+            # get_logger().log_user("Sorting", f"container_{slot}", "pick",
+                                  # f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
 
             # Spawn ghost box
             q = self._slot_color_map.get(rec['color'])
@@ -860,8 +860,8 @@ class SortingTask(BaseTask):
             self._error_start_times.pop(eid, None)
 
             print(f"Sorting Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
-            get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
-                                  f"resolved eid={eid}, color={rec['color']}")
+            # get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
+                                  # f"resolved eid={eid}, color={rec['color']}")
 
             # Remove from error lists
             try:
@@ -879,8 +879,8 @@ class SortingTask(BaseTask):
             self._error_start_times.pop(eid, None)
 
             print(f"Sorting Task: Error #{eid} placed incorrectly in {new_slot} and cleared (was {rec['actual']})")
-            get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
-                                  f"final incorrect eid={eid}, expected={rec['actual']}")
+            # get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
+                                  # f"final incorrect eid={eid}, expected={rec['actual']}")
 
             # Remove error record completely
             try:
@@ -891,7 +891,7 @@ class SortingTask(BaseTask):
             if eid in self._errors:
                 del self._errors[eid]
 
-            # 🔔 Play incorrect chime here
+            # Play incorrect chime here
             self.audio.play_incorrect()
 
         # In either case, deselect after the drop
@@ -928,7 +928,7 @@ class SortingTask(BaseTask):
             into = color
             msg = f"Sorting Task: sorted {color} into {into} - correct"
             print(msg)
-            get_logger().log_robot("Sorting", msg)
+            # get_logger().log_robot("Sorting", msg)
             # play a "correct" sound
             self.audio.play_correct()
         else:
@@ -947,7 +947,7 @@ class SortingTask(BaseTask):
             self._error_start_times[eid] = time.time()  # timestamp in seconds
             msg = f"Sorting Task: sorted {color} into {into} - error (expected {color})"
             print(msg)
-            get_logger().log_robot("Sorting", msg)
+            # get_logger().log_robot("Sorting", msg)
 
             # play only the incorrect chime ONCE here
             self.audio.play_incorrect()
@@ -958,22 +958,29 @@ class SortingTask(BaseTask):
             self._apply_flash_colors()
 
 
-    def _on_metrics_live(self, metrics):
-        """Receive live metrics from the worker and update MetricsManager in real time."""
-        if hasattr(self, "metrics_manager") and self.metrics_manager:
-            if self._total_corrections > 0:
-                metrics['sort_correction_rate'] = (self._correct_corrections / self._total_corrections) * 100
-            else:
-                metrics['sort_correction_rate'] = 0.0
-            
-            self.metrics_manager.update_metrics(metrics)
-        else:
-            # fallback for debugging
-            print("Live metrics:", metrics)
-
     def spawn_box_from_worker(self, box_data):
         """Called when worker wants to spawn a box."""
         color = box_data["color"]
         error = box_data["error"]
         # Spawn the box with color and error info
         self.conveyor.spawn_box(color=color, error=error)
+
+
+    def _on_metrics_live(self, metrics):
+        if hasattr(self, "metrics_manager") and self.metrics_manager:
+            # Update metrics manager as before
+            if self._total_corrections > 0:
+                metrics['sort_correction_rate'] = (self._correct_corrections / self._total_corrections) * 100
+            else:
+                metrics['sort_correction_rate'] = 0.0
+            self.metrics_manager.update_metrics(metrics)
+
+        # --- log 3 core metrics every update ---
+        oc = getattr(self, "observer_control", None)  # injected from LayoutController
+        if oc:
+            ts = oc.get_timestamp()  # MM:SS from ObserverControl timer
+            logger = get_logger()
+
+            logger.log_metric(ts, "sorting", "boxes sorted", metrics.get("sort_total", 0))
+            logger.log_metric(ts, "sorting", "errors", metrics.get("sort_errors", 0))
+            logger.log_metric(ts, "sorting", "errors corrected", self._correct_corrections)

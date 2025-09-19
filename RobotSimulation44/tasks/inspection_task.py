@@ -619,7 +619,7 @@ class InspectionTask(BaseTask):
         self._apply_flash_colors()
 
     def _on_container_clicked(self, slot):
-        get_logger().log_user("Inspection", f"container_{slot}", "click", "container clicked")
+        # get_logger().log_user("Inspection", f"container_{slot}", "click", "container clicked")
 
         # === CASE 1: Pick from bin ===
         if self._selected_error is None:
@@ -706,7 +706,7 @@ class InspectionTask(BaseTask):
             into = color
             msg = f"Inspection Task: sorted {color} into {into} - correct"
             print(msg)
-            get_logger().log_robot("Inspection", msg)
+            # get_logger().log_robot("Inspection", msg)
             self.audio.play_correct()
 
         else:
@@ -723,7 +723,7 @@ class InspectionTask(BaseTask):
 
             msg = f"Inspection Task: sorted {color} into {into} - error (expected {color})"
             print(msg)
-            get_logger().log_robot("Inspection", msg)
+            # get_logger().log_robot("Inspection", msg)
 
             self.audio.play_incorrect()
 
@@ -736,5 +736,14 @@ class InspectionTask(BaseTask):
             else:
                 metrics['insp_correction_rate'] = 0.0
             self.metrics_manager.update_metrics(metrics)
-        else:
-            print("Inspection live metrics:", metrics)
+
+        # --- log 3 core metrics every update ---
+        oc = getattr(self, "observer_control", None)  # injected from LayoutController
+        if oc:
+            ts = oc.get_timestamp()  # MM:SS from ObserverControl timer
+            logger = get_logger()
+
+            logger.log_metric(ts, "inspection", "boxes inspected", metrics.get("insp_total", 0))
+            logger.log_metric(ts, "inspection", "errors", metrics.get("insp_errors", 0))
+            logger.log_metric(ts, "inspection", "errors corrected", self._correct_corrections)
+

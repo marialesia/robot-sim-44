@@ -50,6 +50,9 @@ class LayoutController:
             if hasattr(task, "start"):
                 params = {}
                 if self.observer_control:
+                    # Give each task access to observer_control
+                    task.observer_control = self.observer_control  
+
                     # Check the task type
                     class_name = task.__class__.__name__
                     if class_name == "SortingTask":
@@ -58,12 +61,12 @@ class LayoutController:
                         params = self.observer_control.get_params_for_task("packaging")
                     elif class_name == "InspectionTask":
                         params = self.observer_control.get_params_for_task("inspection")
-                    # else leave params empty for tasks with no parameters
 
                 if params:
                     task.start(**params)
                 else:
                     task.start()
+
 
     def pause_tasks(self):
         """Pause all tasks that have a 'pause' method', then write CSV log."""

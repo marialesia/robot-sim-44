@@ -190,6 +190,7 @@ class ObserverControl(QObject):
         self.save_button.clicked.connect(self.save_parameters)
         self.load_button.clicked.connect(self.load_parameters)
 
+        '''
         # --- Logging for top bar user actions ---
         self.start_button.clicked.connect(
             lambda: get_logger().log_user("TopBar", "Start button", "click", "Start pressed")
@@ -212,6 +213,7 @@ class ObserverControl(QObject):
             lambda s: get_logger().log_user("TopBar", "Inspection checkbox", "toggle",
                                             "checked" if s else "unchecked")
         )
+        '''
 
     # --- Task getter functions ---
     def update_tasks(self):
@@ -279,7 +281,7 @@ class ObserverControl(QObject):
         self.timer_label.setText("00:00")  # reset display
         self.time_limit_input.setDisabled(True)
         # Log start
-        get_logger().log_user("ObserverControl", "Session Timer", "start", "Timer started")
+        # get_logger().log_user("ObserverControl", "Session Timer", "start", "Timer started")
 
     def stop_timer(self):
         if self.running:
@@ -289,7 +291,7 @@ class ObserverControl(QObject):
             self.running = False
             self.time_limit_input.setDisabled(False)
             # Log stop
-            get_logger().log_user("ObserverControl", "Session Timer", "stop", "Timer paused")
+            # get_logger().log_user("ObserverControl", "Session Timer", "stop", "Timer paused")
 
     def update_timer(self):
         if self.start_time and self.running:
@@ -306,7 +308,7 @@ class ObserverControl(QObject):
                 if total_seconds >= time_limit_seconds:
                     self.stop_timer()
                     self.pause_pressed.emit()
-                    get_logger().log_user("ObserverControl", "Session Timer", "stop", "Time limit reached, tasks stopped")
+                    # get_logger().log_user("ObserverControl", "Session Timer", "stop", "Time limit reached, tasks stopped")
 
                     # Flash red
                     self.timer_label.setStyleSheet("color: red")
@@ -316,6 +318,10 @@ class ObserverControl(QObject):
                     self.flash_timer.start(500)
             except ValueError:
                 pass  # ignore invalid input
+    
+    def get_timestamp(self):
+        """Return current session time as MM:SS string."""
+        return self.timer_label.text()
 
     # --- SAVE / LOAD FUNCTIONS ---
     def save_parameters(self):

@@ -1,5 +1,5 @@
 # event_logger.py
-import os, csv, datetime, threading
+import os, csv, threading
 
 class EventLogger:
     def __init__(self):
@@ -10,27 +10,17 @@ class EventLogger:
         with self._lock:
             self._rows.append(row)
 
-    def log_user(self, context, target, action="click", message=""):
+    def log_metric(self, timestamp, task, metric, count):
+        """Log a single metric update."""
         self._add({
-            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
-            "type": "user",
-            "context": context,   # e.g. "Sorting" or "TopBar"
-            "target": target,     # e.g. "container_red", "Start button"
-            "action": action,     # e.g. "click", "toggle"
-            "message": message,   # any extra detail
-        })
-
-    def log_robot(self, context, message):
-        self._add({
-            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
-            "type": "robot",
-            "context": context,   # e.g. "Sorting"
-            "target": "",
-            "action": "",
-            "message": message,
+            "timestamp": timestamp,   # e.g. "00:10" from ObserverControl
+            "task": task,             # e.g. "sorting"
+            "metric": metric,         # e.g. "boxes sorted"
+            "count": count            # integer
         })
 
     def dump_csv(self, path=None):
+        """Dump current rows to a CSV file."""
         with self._lock:
             if not self._rows:
                 return None
@@ -40,15 +30,18 @@ class EventLogger:
         if path is None:
             log_dir = os.path.join(os.getcwd(), "logs")
             os.makedirs(log_dir, exist_ok=True)
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            from datetime import datetime
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             path = os.path.join(log_dir, f"session_{ts}.csv")
 
-        fieldnames = ["timestamp", "type", "context", "target", "action", "message"]
+        fieldnames = ["timestamp", "task", "metric", "count"]
         with open(path, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=fieldnames)
             w.writeheader()
             w.writerows(rows)
+
         return path
+
 
 __singleton = None
 def get_logger():
