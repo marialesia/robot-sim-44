@@ -206,27 +206,38 @@ class SortingTask(BaseTask):
         # --- initialize worker ---
         self.worker = None
 
-    # ===== Called by your existing GUI =====
+
+    # ===== Called by the observer GUI =====
     def start(self, pace=None, bin_count=None, error_rate=None):
-        # --- Show only the number of bins requested ---
-        all_containers = [
-            self.container_red,
-            self.container_blue,
-            self.container_green,
-            self.container_purple,
-            self.container_orange,
-            self.container_teal
-        ]
+        # --- All bins in fixed order ---
+        all_containers = {
+            "red": self.container_red,
+            "blue": self.container_blue,
+            "green": self.container_green,
+            "purple": self.container_purple,
+            "orange": self.container_orange,
+            "teal": self.container_teal,
+        }
 
         bin_count = bin_count or 6
 
-        # Show/hide containers
-        for i, w in enumerate(all_containers):
-            w.setVisible(i < bin_count)
+        # Worker already decides which colors are valid.
+        # Just mirror that choice for container visibility.
+        if bin_count == 6:
+            slot_order = ["red", "blue", "green", "purple", "orange", "teal"]
+        elif bin_count == 4:
+            slot_order = ["blue", "green", "purple", "orange"]
+        elif bin_count == 2:
+            slot_order = ["green", "purple"]
+        else:
+            slot_order = ["red", "blue", "green", "purple", "orange", "teal"][:bin_count]
 
-        # Update slot mapping so only visible bins can receive errors
-        slot_order = ["red", "blue", "green", "purple", "orange", "teal"]
-        self._slot_to_widget = {slot_order[i]: all_containers[i] for i in range(bin_count)}
+        # Show only the chosen containers
+        for name, widget in all_containers.items():
+            widget.setVisible(name in slot_order)
+
+        # Update slot -> widget mapping
+        self._slot_to_widget = {name: all_containers[name] for name in slot_order}
 
         # Reset per-bin error lists
         self._bin_errors = {k: [] for k in self._slot_to_widget.keys()}
@@ -240,7 +251,7 @@ class SortingTask(BaseTask):
         self._last_touch_time_ms = -10000
         self._pick_state = "idle"
         self._pick_t = 0
-        self._target_slot = None  # reset target on start
+        self._target_slot = None
         self._present_slot_override = None
         self._pending_color = None
 
@@ -259,7 +270,6 @@ class SortingTask(BaseTask):
 
         # ===== start the worker logic =====
         if self.worker is None:
-            # first time: create worker
             self.worker = SortingWorker(
                 pace=pace,
                 bin_count=bin_count,
@@ -270,10 +280,11 @@ class SortingTask(BaseTask):
             self.worker.metrics_live.connect(self._on_metrics_live)
             self.worker.start()
         elif not self.worker.isRunning():
-            # worker exists but was paused: resume
             self.worker.running = True
             if not self.worker.isRunning():
                 self.worker.start()
+
+
 
     def pause(self):
         # ===== stop motions =====
@@ -567,7 +578,7 @@ class SortingTask(BaseTask):
                 if i < len(cols):
                     return cols[i]
         return None
-
+    
     # Map a QColor to a slot name matching the containers
     def _color_to_slot(self, qcolor):
         try:
@@ -587,7 +598,7 @@ class SortingTask(BaseTask):
         if key == "#b8efe6":
             return "teal"
         return None
-
+    
     # Pick a wrong bin (used when worker flags an incorrect sort)
     def _wrong_slot_for(self, slot):
         candidates = list(self._slot_to_widget.keys())

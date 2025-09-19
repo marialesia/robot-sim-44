@@ -15,8 +15,8 @@ class InspectionTask(BaseTask):
         super().__init__(task_name="Inspection")
 
         # ---- Robot arm visuals (same style as before) ----
-        self.arm.shoulder_angle = -100
-        self.arm.elbow_angle = -20
+        self.arm.shoulder_angle = -90
+        self.arm.elbow_angle = -0
         self.arm.c_arm = QColor("#2e86c1")
 
         # ---- Two containers: LEFT=green (built-in), RIGHT=red ----

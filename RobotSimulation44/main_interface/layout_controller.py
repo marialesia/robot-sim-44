@@ -1,5 +1,5 @@
 # main_interface/layout_controller.py
-from PyQt5.QtWidgets import QHBoxLayout
+from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtCore import Qt
 from event_logger import get_logger 
 
@@ -10,7 +10,8 @@ class LayoutController:
         self.observer_control = observer_control
 
         # Workspace layout
-        self.workspace_area = QHBoxLayout()
+        self.workspace_area = QVBoxLayout()
+        self.workspace_area.setAlignment(Qt.AlignCenter)  # <-- force centering
         parent_layout.addLayout(self.workspace_area)
 
     def set_status_label(self, status_label):
@@ -18,7 +19,7 @@ class LayoutController:
         self.status_label = status_label
 
     def update_workspace(self, active_tasks):
-        """Clear workspace and add panels for active tasks, centered as a group."""
+        """Clear workspace and add panels for active tasks, stacked vertically."""
         # Fully clear current workspace (widgets AND spacers)
         while self.workspace_area.count():
             item = self.workspace_area.takeAt(0)
@@ -26,17 +27,14 @@ class LayoutController:
             if w is not None:
                 w.setParent(None)
 
-        # Add left spacer -> keeps the group centered
-        self.workspace_area.addStretch(1)
-
-        # Add selected task panels
+        # Add selected task panels (stack vertically, centered horizontally)
         panels = self.task_manager.get_task_panels(active_tasks)
         for panel in panels:
-            # Align near the top; horizontal centering is handled by the stretches
-            self.workspace_area.addWidget(panel, 0, Qt.AlignVCenter)
+            self.workspace_area.addWidget(panel, 0, Qt.AlignHCenter)
 
-        # Add right spacer
-        self.workspace_area.addStretch(1)
+        # Add stretch above and below so panels stay vertically centered
+        self.workspace_area.insertStretch(0, 1)   # push down from top
+        self.workspace_area.addStretch(1)         # push up from bottom
 
         # Update status label if assigned
         if self.status_label:
@@ -67,7 +65,6 @@ class LayoutController:
                 else:
                     task.start()
 
-
     def pause_tasks(self):
         """Pause all tasks that have a 'pause' method', then write CSV log."""
         for task in self.task_manager.task_instances.values():
@@ -88,7 +85,7 @@ class LayoutController:
             if hasattr(task, "stop"):
                 task.stop()
 
-        # --- Dump buffered events to CSV on Pause --- 
+        # --- Dump buffered events to CSV on Stop --- 
         path = get_logger().dump_csv()
         if self.status_label:
             if path:

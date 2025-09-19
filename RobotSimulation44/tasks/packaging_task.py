@@ -156,7 +156,7 @@ class PackagingTask(BaseTask):
 
         # Timed drip-spawner for batches
         self._box_timer = QTimer(self)
-        self._box_timer.setInterval(1000)          # drip speed; tweak if needed
+        self._box_timer.setInterval(1500)          # drip speed; tweak if needed
         self._box_timer.timeout.connect(self._drip_spawn_tick)
 
         # Pending batch state
@@ -370,12 +370,15 @@ class PackagingTask(BaseTask):
 
         # Add needed amount to the current schedule (or start a new one)
         self._batch_color = color
-        self._batch_remaining = (scheduled + need)
+        self._batch_remaining = need
         self._batch_active = True
         front["batch_spawned"] = True  # gate repeated scheduling for this lead
 
         if not self._box_timer.isActive():
-            self._box_timer.start()
+            # Delay before drip spawning starts 
+            QTimer.singleShot(1500, lambda: (
+                self._box_timer.start() if (self._batch_active and self._batch_remaining > 0) else None
+            ))
         
         try:
             get_logger().log_robot(
@@ -520,29 +523,34 @@ class PackagingTask(BaseTask):
 
         # --- Error vs Correct handling ---
         if packed_color is not None and active_color is not None and (packed_color != active_color):
-            # Enter/refresh error state
-            if not active.get("error"):
-                active["error"] = True
-                active["fixed"] = False
+            # Wrong placement
+            active["error"] = True
+            active["fixed"] = False
+            # Only set mis_color if not already set (keep first wrong color visible)
+            if not active.get("mis_color"):
                 active["mis_color"] = packed_color
-                active["err_start"] = time.time()
-                # Play incorrect chime once on entering error
-                try:
-                    self.audio.play_incorrect()
-                except Exception:
-                    pass
-            # still errored; keep the original err_start so alarm delay is measured from first moment
+            active["err_start"] = active.get("err_start") or time.time()
+            active["mis_count"] = active.get("mis_count", 0) + 1  # count extra wrongs
+            try:
+                self.audio.play_incorrect()
+            except Exception:
+                pass
             self._apply_error_visuals()
             if self.worker:
                 self.worker.rearm_fade()
         else:
             # Correct placement path
             if active.get("error"):
-                # was in error, now clear
-                active["error"] = False
-                active["fixed"] = False
-                active["err_start"] = None
-                self._apply_error_visuals()
+                # Still errored until all wrongs are cleared
+                if active.get("mis_count", 0) > 0:
+                    pass  # keep error, don't clear yet
+                else:
+                    # no wrongs left, clear
+                    active["error"] = False
+                    active["fixed"] = False
+                    active["mis_color"] = None
+                    active["err_start"] = None
+                    self._apply_error_visuals()
             # Play correct chime for ANY correct pack
             try:
                 self.audio.play_correct()
@@ -559,6 +567,7 @@ class PackagingTask(BaseTask):
         if self._should_fade_current or (active["count"] >= active["capacity"] > 0):
             if not active["fading"]:
                 self._begin_fade_and_shift_front()
+
 
     # ---------- Fade helpers (front and mid-line) ----------
     def _begin_fade_and_shift_front(self):
@@ -961,7 +970,7 @@ class PackagingTask(BaseTask):
     def _pose_prep(self):    return (-92.0, -12.0)
     def _pose_pick(self):    return (-110.0, -95.0)
     def _pose_lift(self):    return (-93.0, -10.0)
-    def _pose_present(self): return (-240.0, -12.0)
+    def _pose_present(self): return (40.0,  10.0)
 
     # ---------- FSM plumbing ----------
     def _set_arm(self, shoulder, elbow):
@@ -1084,10 +1093,12 @@ class PackagingTask(BaseTask):
         One-attempt fix flow:
           - Click front (if errored) to pick.
           - Click ANY container to place:
-              - If target color == expected -> move 1 from front to target; clear error.
-              - Else -> still move 1 out of front, error is consumed.
-          - if front is fading but has error and user clicks it, cancel fade.
-          - if a non-front container becomes full due to the drop, fade it immediately.
+              - If target color == expected -> decrement mis_count.
+              - If mis_count > 0, keep error active until all are fixed.
+              - Else clear error.
+          - If wrong placement, still consume one wrong item.
+          - If front is fading but has error and user clicks it, cancel fade.
+          - If a non-front container becomes full due to the drop, fade it immediately.
         """
         if not self._containers:
             return
@@ -1157,12 +1168,21 @@ class PackagingTask(BaseTask):
         self._total_corrections += 1
 
         if target_color == expected:
-            # Correct drop: clear error
+            # Correct drop: decrement mis_count
             self._correct_corrections += 1
-            front["error"] = False
-            front["fixed"] = True
-            front["mis_color"] = None
-            self._mark_fixed_visual(front)
+            if front.get("mis_count", 0) > 1:
+                front["mis_count"] -= 1
+                # Still errored until all wrong boxes are cleared
+                front["error"] = True
+                front["fixed"] = False
+            else:
+                # All wrong boxes cleared
+                front["error"] = False
+                front["fixed"] = True
+                front["mis_color"] = None
+                front["mis_count"] = 0
+                self._mark_fixed_visual(front)
+
             try:
                 self.audio.play_correct()   # play correct chime on user correction
             except Exception:
@@ -1172,10 +1192,16 @@ class PackagingTask(BaseTask):
             except Exception:
                 pass
         else:
-            # Wrong drop: consume the error anyway
-            front["error"] = False
-            front["fixed"] = False
-            front["mis_color"] = None
+            # Wrong drop: consume one error anyway
+            if front.get("mis_count", 0) > 1:
+                front["mis_count"] -= 1
+                front["error"] = True
+                front["fixed"] = False
+            else:
+                front["error"] = False
+                front["fixed"] = False
+                front["mis_color"] = None
+                front["mis_count"] = 0
             try:
                 get_logger().log_user("Packaging", f"container_{target_color}", "drop",
                                       "incorrect placement (error consumed)")
@@ -1277,7 +1303,7 @@ class PackagingTask(BaseTask):
 
             self.metrics_manager.update_metrics(metrics)
 
-        # --- NEW: log 3 core metrics every update ---
+        # --- Log 3 core metrics every update ---
         oc = getattr(self, "observer_control", None)  # injected from LayoutController
         if oc:
             ts = oc.get_timestamp()  # MM:SS from ObserverControl timer

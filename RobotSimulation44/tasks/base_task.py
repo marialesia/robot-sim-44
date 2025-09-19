@@ -1,4 +1,5 @@
-﻿from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout
+﻿# tasks/base_task.py
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout
 from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, QTimer, pyqtProperty
 
@@ -337,12 +338,6 @@ class BaseTask(QWidget):
     """
     One task’s scene with three widgets (conveyor, arm, container).
     Uses a QGridLayout so subclasses can reposition each widget per task.
-
-    Exposes:
-      - self.scene (QFrame)
-      - self.grid  (QGridLayout)
-      - self.conveyor, self.arm, self.container
-      - set_positions(conveyor=..., arm=..., container=..., ...)
     """
     def __init__(self, task_name="Task"):
         super().__init__()
@@ -350,23 +345,36 @@ class BaseTask(QWidget):
         outer.setContentsMargins(12, 12, 12, 12)
         outer.setSpacing(10)
 
+        # --- Modern title ---
         title = QLabel(f"{task_name}")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size:16px; font-weight:bold; padding:4px 0;")
+        title.setStyleSheet(
+            "font-size: 18px; font-weight: bold; padding: 6px 0;"
+            "color: #f0f0f5;"
+            "background-color: transparent;"
+        )
         outer.addWidget(title)
 
-        # Scene frame for visual separation (unchanged look)
+        # Optional: soft glow effect on title
+        from PyQt5.QtWidgets import QGraphicsDropShadowEffect
+        glow = QGraphicsDropShadowEffect(self)
+        glow.setBlurRadius(12)
+        glow.setOffset(0, 0)
+        glow.setColor(QColor(0, 200, 255, 150))  # cyan glow
+        title.setGraphicsEffect(glow)
+
+        # --- Modern scene frame ---
         self.scene = QFrame()
         self.scene.setObjectName("warehouseScene")
         self.scene.setStyleSheet(
             "#warehouseScene { "
-            "border: 2px solid #444; border-radius: 8px; "
-            "background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #f7f7f9, stop:1 #e6e6ea); }"
+            "border: 1px solid #222; "
+            "border-radius: 10px; "
+            "background-color: #1b1f2a;"  # dark navy background
+            "}"
         )
-        
         self.scene.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.scene.setMinimumSize(720, 400) #(width, length)
-        self.scene.setMaximumSize(1200, 400) 
+        self.scene.setMinimumSize(1200, 350)
         outer.addWidget(self.scene)
 
         # ---- Grid layout for flexible placement ----
@@ -383,7 +391,7 @@ class BaseTask(QWidget):
         self.arm = RobotArmWidget()
         self.container = StorageContainerWidget()
 
-        # Default placement (same as before visually)
+        # Default placement
         self.grid.addWidget(self.conveyor, 0, 0, 1, 2, Qt.AlignTop)
         self.grid.addWidget(self.arm,      1, 0, 1, 1, Qt.AlignLeft   | Qt.AlignBottom)
         self.grid.addWidget(self.container,1, 1, 1, 1, Qt.AlignRight  | Qt.AlignBottom)

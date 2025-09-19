@@ -19,13 +19,28 @@ class UserSystemWindow(QMainWindow):
         self.setCentralWidget(main_widget)
         self.main_layout = QVBoxLayout(main_widget)
 
+        # --- Apply dark navy style (Qt-safe) ---
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #1b2430;   /* darker navy */
+            }
+            QLabel {
+                color: #f0f0f0;              /* light text */
+                font-size: 15px;
+                font-weight: bold;
+            }
+        """)
+
         # Status label
         self.status_label = QLabel("Select tasks to begin.")
+        self.status_label.setAlignment(Qt.AlignCenter)
         self.main_layout.addWidget(self.status_label)
 
         # Layout controller (workspace)
         self.layout_controller = LayoutController(self.main_layout, self.task_manager)
         self.layout_controller.set_status_label(self.status_label)
+
+
 
 class ObserverSystemWindow(QMainWindow):
     def __init__(self, task_manager):

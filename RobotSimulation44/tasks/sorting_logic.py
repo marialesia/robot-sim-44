@@ -26,8 +26,16 @@ class SortingWorker(QThread):
 
         self.running = True
 
-        all_colors = ["red", "blue", "green", "purple", "orange", "teal"]
-        self.colors = all_colors[:bin_count]
+        if bin_count == 6:
+            self.colors = ["red", "blue", "green", "purple", "orange", "teal"]
+        elif bin_count == 4:
+            self.colors = ["blue", "green", "purple", "orange"]
+        elif bin_count == 2:
+            self.colors = ["green", "purple"]
+        else:
+            # fallback (shouldn’t really happen)
+            self.colors = ["red", "blue", "green", "purple", "orange", "teal"]
+
 
         self.pace_map = {
             "slow": (0.1, 0.3),
