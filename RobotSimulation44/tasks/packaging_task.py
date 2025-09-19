@@ -498,7 +498,7 @@ class PackagingTask(BaseTask):
         if active["fading"]:
             return
 
-        # play robotic arm sound at the moment of pack
+        # audio at pack
         try:
             self.audio.play_robotic_arm()
         except Exception:
@@ -512,7 +512,7 @@ class PackagingTask(BaseTask):
         active["count"] += 1
         self._update_label(active)
 
-        # Animate flying box into the active container
+        # fly-in animation
         target_widget = active["widget"]
         if getattr(self.arm, "held_box_color", None):
             self._animate_flying_box(self.arm.held_box_color, target_widget)
@@ -523,35 +523,26 @@ class PackagingTask(BaseTask):
 
         # --- Error vs Correct handling ---
         if packed_color is not None and active_color is not None and (packed_color != active_color):
-            # Wrong placement
+            # Wrong placement: append to queue, display the first pending color
+            q = active.setdefault("mis_queue", [])
+            q.append(packed_color)
+            active["mis_color"] = q[0]
+            active["mis_count"] = len(q)
             active["error"] = True
             active["fixed"] = False
-            # Only set mis_color if not already set (keep first wrong color visible)
-            if not active.get("mis_color"):
-                active["mis_color"] = packed_color
             active["err_start"] = active.get("err_start") or time.time()
-            active["mis_count"] = active.get("mis_count", 0) + 1  # count extra wrongs
+
             try:
-                self.audio.play_incorrect()
+                # Play incorrect chime immediately, then schedule alarm if error persists
+                self.audio.play_incorrect_with_alarm(delay_ms=2000)
             except Exception:
                 pass
             self._apply_error_visuals()
             if self.worker:
                 self.worker.rearm_fade()
         else:
-            # Correct placement path
-            if active.get("error"):
-                # Still errored until all wrongs are cleared
-                if active.get("mis_count", 0) > 0:
-                    pass  # keep error, don't clear yet
-                else:
-                    # no wrongs left, clear
-                    active["error"] = False
-                    active["fixed"] = False
-                    active["mis_color"] = None
-                    active["err_start"] = None
-                    self._apply_error_visuals()
-            # Play correct chime for ANY correct pack
+            # Correct placement (of the right color into this container)
+            # Do not change existing error state here; errors are cleared only by user correction.
             try:
                 self.audio.play_correct()
             except Exception:
@@ -559,8 +550,8 @@ class PackagingTask(BaseTask):
 
         if self.worker:
             is_error = (packed_color is not None and 
-                active_color is not None and 
-                (packed_color != active_color))
+                        active_color is not None and 
+                        (packed_color != active_color))
             self.worker.record_pack(is_error=is_error)
 
         # Fade condition: always fade once capacity reached, even if error == True
@@ -1090,14 +1081,12 @@ class PackagingTask(BaseTask):
     # ---------- Error smart-fix (click to pick, click to place — one attempt) ----------
     def _smart_fix_pick_or_place(self, clicked_rec):
         """
-        One-attempt fix flow:
-          - Click front (if errored) to pick.
+        One-attempt fix flow with queued errors:
+          - Click front (if errored) to pick the *next* wrong color (queue head).
           - Click ANY container to place:
-              - If target color == expected -> decrement mis_count.
-              - If mis_count > 0, keep error active until all are fixed.
-              - Else clear error.
-          - If wrong placement, still consume one wrong item.
-          - If front is fading but has error and user clicks it, cancel fade.
+              - If target color == expected (queue head) -> remove one from queue.
+              - Else -> still consume one from the queue (user moved the wrong item).
+          - Keep error active until the queue is empty; then clear.
           - If a non-front container becomes full due to the drop, fade it immediately.
         """
         if not self._containers:
@@ -1110,7 +1099,7 @@ class PackagingTask(BaseTask):
             return
         front = self._containers[0]
 
-        # Cancel fading if user is starting to fix an errored, fading front
+        # Cancel fading if user starts fixing an errored, fading front
         if idx_clicked == 0 and front.get("fading") and front.get("error"):
             front["fading"] = False
             self._should_fade_current = False
@@ -1126,8 +1115,10 @@ class PackagingTask(BaseTask):
         # 1) If no selection yet: click front (if errored) to pick it
         if not self._selected_active:
             if idx_clicked == 0 and front.get("error"):
+                q = front.setdefault("mis_queue", [])
+                # expected color is always the queue head
                 self._selected_active = True
-                self._selected_expected = front.get("mis_color")
+                self._selected_expected = (q[0] if q else front.get("mis_color"))
                 self._apply_error_visuals()  # amber border on front
 
                 # --- Spawn ghost box matching expected color ---
@@ -1158,7 +1149,7 @@ class PackagingTask(BaseTask):
             self._apply_error_visuals()
             return
 
-        # Consume 1 from front either way
+        # Consume 1 from front either way (we're removing a wrong item from the front)
         if front["count"] > 0:
             front["count"] -= 1
             self._update_label(front)
@@ -1167,48 +1158,35 @@ class PackagingTask(BaseTask):
 
         self._total_corrections += 1
 
-        if target_color == expected:
-            # Correct drop: decrement mis_count
-            self._correct_corrections += 1
-            if front.get("mis_count", 0) > 1:
-                front["mis_count"] -= 1
-                # Still errored until all wrong boxes are cleared
-                front["error"] = True
-                front["fixed"] = False
-            else:
-                # All wrong boxes cleared
-                front["error"] = False
-                front["fixed"] = True
-                front["mis_color"] = None
-                front["mis_count"] = 0
-                self._mark_fixed_visual(front)
+        # Update the error queue
+        q = front.setdefault("mis_queue", [])
+        if q:
+            # Remove the head regardless of where it was dropped
+            q.pop(0)
+        front["mis_count"] = len(q)
+        front["mis_color"] = q[0] if q else None
+        front["error"] = bool(q)
+        front["fixed"] = not q
 
+        if target_color == expected:
+            self._correct_corrections += 1
             try:
-                self.audio.play_correct()   # play correct chime on user correction
+                self.audio.play_correct()
             except Exception:
                 pass
             try:
-                get_logger().log_user("Packaging", f"container_{target_color}", "drop", "resolved")
+                get_logger().log_user("Packaging", f"container_{target_color}", "drop", "resolved_or_progress")
             except Exception:
                 pass
         else:
-            # Wrong drop: consume one error anyway
-            if front.get("mis_count", 0) > 1:
-                front["mis_count"] -= 1
-                front["error"] = True
-                front["fixed"] = False
-            else:
-                front["error"] = False
-                front["fixed"] = False
-                front["mis_color"] = None
-                front["mis_count"] = 0
+            # Wrong drop target: we still consumed one wrong item from the front
             try:
                 get_logger().log_user("Packaging", f"container_{target_color}", "drop",
                                       "incorrect placement (error consumed)")
             except Exception:
                 pass
 
-        # NEW: If a non-front container filled due to this drop, fade it right away
+        # If a non-front container filled due to this drop, fade it right away
         if idx_clicked != 0:
             cap = int(clicked_rec.get("capacity", 0))
             cnt = int(clicked_rec.get("count", 0))
@@ -1218,7 +1196,7 @@ class PackagingTask(BaseTask):
         # Reset selection/visuals
         self._selected_active = False
         self._selected_expected = None
-        self._end_drag_box()  # --- remove ghost on drop ---
+        self._end_drag_box()
         self._apply_error_visuals()
 
         if self.worker:
