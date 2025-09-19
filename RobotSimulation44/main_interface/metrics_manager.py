@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from matplotlib.ticker import MaxNLocator, MultipleLocator
+from matplotlib.ticker import MultipleLocator
 import time
 
 
@@ -31,10 +31,11 @@ class MetricsManager(QWidget):
             sorting_layout.addWidget(lbl)
 
         # Graph for Sorting
-        self.sort_fig = Figure(figsize=(3, 2))
+        self.sort_fig = Figure(figsize=(3, 2), facecolor="#f9f9f9")
         self.sort_canvas = FigureCanvas(self.sort_fig)
         self.sort_ax = self.sort_fig.add_subplot(111)
         self.sort_ax.tick_params(labelsize=8)
+        self.sort_ax.set_facecolor("#f9f9f9")
         self.sort_errors_data = []
         self.sort_corrections_data = []
         self.sort_times = []
@@ -44,8 +45,13 @@ class MetricsManager(QWidget):
         self.sort_ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, 1.17), ncol=2)
         self.sort_ax.set_ylim(0, 10)
         self.sort_ax.set_xlim(0, 30)
-        self.sort_ax.yaxis.set_major_locator(MultipleLocator(5))
+        # Major and minor ticks
+        self.sort_ax.yaxis.set_major_locator(MultipleLocator(5))  # 0,5,10
+        self.sort_ax.yaxis.set_minor_locator(MultipleLocator(1))  # grid every 1
         self.sort_ax.xaxis.set_major_locator(MultipleLocator(10))
+        self.sort_ax.xaxis.set_minor_locator(MultipleLocator(1))
+        self.sort_ax.grid(which='minor', linestyle='--', linewidth=0.5, alpha=0.5)
+        self.sort_ax.grid(which='major', linestyle='--', linewidth=0.5, alpha=0.7)
         sorting_layout.addWidget(self.sort_canvas)
 
         sorting_box.setLayout(sorting_layout)
@@ -68,10 +74,11 @@ class MetricsManager(QWidget):
             packaging_layout.addWidget(lbl)
 
         # Graph for Packaging
-        self.pack_fig = Figure(figsize=(3, 2))
+        self.pack_fig = Figure(figsize=(3, 2), facecolor="#f9f9f9")
         self.pack_canvas = FigureCanvas(self.pack_fig)
         self.pack_ax = self.pack_fig.add_subplot(111)
         self.pack_ax.tick_params(labelsize=8)
+        self.pack_ax.set_facecolor("#f9f9f9")
         self.pack_errors_data = []
         self.pack_corrections_data = []
         self.pack_times = []
@@ -81,8 +88,13 @@ class MetricsManager(QWidget):
         self.pack_ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, 1.17), ncol=2)
         self.pack_ax.set_ylim(0, 10)
         self.pack_ax.set_xlim(0, 30)
-        self.pack_ax.yaxis.set_major_locator(MultipleLocator(5))
+        # Major and minor ticks
+        self.pack_ax.yaxis.set_major_locator(MultipleLocator(5))  # 0,5,10
+        self.pack_ax.yaxis.set_minor_locator(MultipleLocator(1))  # grid every 1
         self.pack_ax.xaxis.set_major_locator(MultipleLocator(10))
+        self.pack_ax.xaxis.set_minor_locator(MultipleLocator(1))
+        self.pack_ax.grid(which='minor', linestyle='--', linewidth=0.5, alpha=0.5)
+        self.pack_ax.grid(which='major', linestyle='--', linewidth=0.5, alpha=0.7)
         packaging_layout.addWidget(self.pack_canvas)
 
         packaging_box.setLayout(packaging_layout)
@@ -105,10 +117,11 @@ class MetricsManager(QWidget):
             inspection_layout.addWidget(lbl)
 
         # Graph for Inspection
-        self.insp_fig = Figure(figsize=(3, 2))
+        self.insp_fig = Figure(figsize=(3, 2), facecolor="#f9f9f9")
         self.insp_canvas = FigureCanvas(self.insp_fig)
         self.insp_ax = self.insp_fig.add_subplot(111)
         self.insp_ax.tick_params(labelsize=8)
+        self.insp_ax.set_facecolor("#f9f9f9")
         self.insp_errors_data = []
         self.insp_corrections_data = []
         self.insp_times = []
@@ -118,8 +131,13 @@ class MetricsManager(QWidget):
         self.insp_ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, 1.17), ncol=2)
         self.insp_ax.set_ylim(0, 10)
         self.insp_ax.set_xlim(0, 30)
-        self.insp_ax.yaxis.set_major_locator(MultipleLocator(5))
+        # Major and minor ticks
+        self.insp_ax.yaxis.set_major_locator(MultipleLocator(5))  # 0,5,10
+        self.insp_ax.yaxis.set_minor_locator(MultipleLocator(1))  # grid every 1
         self.insp_ax.xaxis.set_major_locator(MultipleLocator(10))
+        self.insp_ax.xaxis.set_minor_locator(MultipleLocator(1))
+        self.insp_ax.grid(which='minor', linestyle='--', linewidth=0.5, alpha=0.5)
+        self.insp_ax.grid(which='major', linestyle='--', linewidth=0.5, alpha=0.7)
         inspection_layout.addWidget(self.insp_canvas)
 
         inspection_box.setLayout(inspection_layout)
