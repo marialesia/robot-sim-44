@@ -150,6 +150,10 @@ class InspectionTask(BaseTask):
 
     # ===== Controls =====
     def start(self, pace=None, error_rate=None, error_rate_percent=None):
+        # --- Guard: only run if this task is enabled ---
+        if not getattr(self, "enabled", True):
+            return
+
         self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
 
@@ -183,9 +187,10 @@ class InspectionTask(BaseTask):
             self.worker.running = True
             if not self.worker.isRunning():
                 self.worker.start()
-        
+    
         # Playing conveyor sound
         self.audio.start_conveyor()
+
 
     def pause(self):
         self.conveyor.enable_motion(False)

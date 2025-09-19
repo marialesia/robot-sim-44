@@ -530,19 +530,18 @@ class PackagingTask(BaseTask):
             active["mis_count"] = len(q)
             active["error"] = True
             active["fixed"] = False
-            active["err_start"] = active.get("err_start") or time.time()
+            active["err_start"] = time.time()
 
             try:
-                # Play incorrect chime immediately, then schedule alarm if error persists
-                self.audio.play_incorrect_with_alarm(delay_ms=2000)
+                # Play incorrect chime immediately (alarm handled later by _update_alarm_state)
+                self.audio.play_incorrect()
             except Exception:
                 pass
             self._apply_error_visuals()
             if self.worker:
                 self.worker.rearm_fade()
         else:
-            # Correct placement (of the right color into this container)
-            # Do not change existing error state here; errors are cleared only by user correction.
+            # Correct placement
             try:
                 self.audio.play_correct()
             except Exception:
@@ -554,7 +553,7 @@ class PackagingTask(BaseTask):
                         (packed_color != active_color))
             self.worker.record_pack(is_error=is_error)
 
-        # Fade condition: always fade once capacity reached, even if error == True
+        # Fade condition
         if self._should_fade_current or (active["count"] >= active["capacity"] > 0):
             if not active["fading"]:
                 self._begin_fade_and_shift_front()
@@ -766,6 +765,10 @@ class PackagingTask(BaseTask):
 
     # ---------- Lifecycle ----------
     def start(self, pace=None, error_rate=None):
+        # --- Guard: only run if this task is enabled ---
+        if not getattr(self, "enabled", True):
+            return
+
         self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
         # conveyor audio
@@ -852,6 +855,7 @@ class PackagingTask(BaseTask):
             get_logger().log_user("Packaging", "control", "start", f"pace={pace},error_rate={error_rate}")
         except Exception:
             pass
+
 
     def pause(self):
         self.conveyor.enable_motion(False)
@@ -1180,6 +1184,10 @@ class PackagingTask(BaseTask):
                 pass
         else:
             # Wrong drop target: we still consumed one wrong item from the front
+            try:
+                self.audio.play_incorrect()
+            except Exception:
+                pass
             try:
                 get_logger().log_user("Packaging", f"container_{target_color}", "drop",
                                       "incorrect placement (error consumed)")

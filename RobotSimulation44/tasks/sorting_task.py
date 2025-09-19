@@ -209,6 +209,10 @@ class SortingTask(BaseTask):
 
     # ===== Called by the observer GUI =====
     def start(self, pace=None, bin_count=None, error_rate=None):
+        # --- Guard: only run if this task is enabled ---
+        if not getattr(self, "enabled", True):
+            return
+
         # --- All bins in fixed order ---
         all_containers = {
             "red": self.container_red,
@@ -283,7 +287,6 @@ class SortingTask(BaseTask):
             self.worker.running = True
             if not self.worker.isRunning():
                 self.worker.start()
-
 
 
     def pause(self):
