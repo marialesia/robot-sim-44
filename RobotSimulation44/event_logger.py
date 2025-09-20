@@ -1,5 +1,12 @@
 # event_logger.py
-import os, csv, threading
+import os, sys, csv, threading
+from datetime import datetime
+
+def _base_dir():
+    """Return base dir for logs (works in dev and PyInstaller)."""
+    if getattr(sys, "frozen", False):  # Running from .exe
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(".")
 
 class EventLogger:
     def __init__(self):
@@ -13,10 +20,10 @@ class EventLogger:
     def log_metric(self, timestamp, task, metric, count):
         """Log a single metric update."""
         self._add({
-            "timestamp": timestamp,   # e.g. "00:10" from ObserverControl
-            "task": task,             # e.g. "sorting"
-            "metric": metric,         # e.g. "boxes sorted"
-            "count": count            # integer
+            "timestamp": timestamp,
+            "task": task,
+            "metric": metric,
+            "count": count
         })
 
     def dump_csv(self, path=None):
@@ -28,9 +35,8 @@ class EventLogger:
             self._rows.clear()
 
         if path is None:
-            log_dir = os.path.join(os.getcwd(), "logs")
+            log_dir = os.path.join(_base_dir(), "logs")
             os.makedirs(log_dir, exist_ok=True)
-            from datetime import datetime
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             path = os.path.join(log_dir, f"session_{ts}.csv")
 

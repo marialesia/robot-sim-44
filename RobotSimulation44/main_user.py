@@ -42,6 +42,8 @@ def main():
             bridge.pause_tasks.emit()
         elif cmd == "stop":
             bridge.stop_tasks.emit()
+        elif cmd == "complete":  
+            user_window.layout_controller.complete_tasks()
 
     client = Client(host="127.0.0.1", port=5000, on_message=handle_message)
     client.start()

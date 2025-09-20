@@ -86,7 +86,7 @@ class LayoutController:
             if path:
                 self.status_label.setText(f"Complete. Log saved to observer device")
             else:
-                self.status_label.setText("Complete. (No events to log.)")
+                self.status_label.setText("Complete.")
 
     def stop_tasks(self):
         """Stop all tasks that have a 'stop' method', then write CSV log."""
@@ -100,4 +100,4 @@ class LayoutController:
             if path:
                 self.status_label.setText(f"Stopped. Log saved to: {path}")
             else:
-                self.status_label.setText("Stopped. (No events to log.)")
+                self.status_label.setText("Stopped.")

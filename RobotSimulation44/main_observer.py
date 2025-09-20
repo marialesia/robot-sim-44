@@ -42,6 +42,17 @@ def main():
         })
     )
 
+    # Complete button (or timer expiry)
+    def complete_handler():
+        server.send({"command": "complete"})
+        # Dump metrics to CSV when completing
+        path = get_logger().dump_csv()
+        if path:
+            print(f"[Observer] Metrics saved to {path}")
+            observer_window.log_button.setText(f"Log saved to {os.path.dirname(path)}")
+
+    oc.complete_pressed.connect(complete_handler)
+
     # Stop button
     def stop_handler():
         server.send({"command": "stop"})
@@ -49,7 +60,6 @@ def main():
         path = get_logger().dump_csv()
         if path:
             print(f"[Observer] Metrics saved to {path}")
-            # Update log button label to point to folder
             observer_window.log_button.setText(f"Log saved to {os.path.dirname(path)}")
 
     oc.stop_pressed.connect(stop_handler)
