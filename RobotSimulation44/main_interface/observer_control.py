@@ -11,7 +11,7 @@ class ObserverControl(QObject):
     # Signals to communicate with layout controller
     tasks_changed = pyqtSignal(list)
     start_pressed = pyqtSignal()
-    pause_pressed = pyqtSignal()
+    complete_pressed = pyqtSignal()
     stop_pressed = pyqtSignal()
 
     def __init__(self, parent_layout, audio_manager=None):
@@ -34,7 +34,7 @@ class ObserverControl(QObject):
         button_row = QHBoxLayout()
         button_row.addStretch(1)
         self.start_button = QPushButton("Start")
-        self.pause_button = QPushButton("Pause")
+        self.complete_button = QPushButton("Complete")
         self.stop_button = QPushButton("Stop")
         # --- New Save / Load buttons ---
         self.save_button = QPushButton("Save Params")
@@ -44,7 +44,7 @@ class ObserverControl(QObject):
         self.time_limit_input.setPlaceholderText("Time Limit")
         self.time_limit_input.setFixedWidth(70)
         button_row.addWidget(self.start_button)
-        # button_row.addWidget(self.pause_button)
+        # button_row.addWidget(self.complete_button)
         button_row.addWidget(self.stop_button)
         button_row.addWidget(self.save_button)
         button_row.addWidget(self.load_button)
@@ -210,9 +210,9 @@ class ObserverControl(QObject):
         self.packaging_checkbox.stateChanged.connect(self.update_tasks)
         self.inspection_checkbox.stateChanged.connect(self.update_tasks)
 
-        # === Connections for start/pause/stop buttons ===
+        # === Connections for start/stop buttons ===
         self.start_button.clicked.connect(lambda: self.start_pressed.emit())
-        self.pause_button.clicked.connect(lambda: self.pause_pressed.emit())
+        self.complete_button.clicked.connect(lambda: self.complete_pressed.emit())
         self.stop_button.clicked.connect(lambda: self.stop_pressed.emit())
 
         # === Connections for save/load buttons ===
@@ -224,8 +224,8 @@ class ObserverControl(QObject):
         self.start_button.clicked.connect(
             lambda: get_logger().log_user("TopBar", "Start button", "click", "Start pressed")
         )
-        self.pause_button.clicked.connect(
-            lambda: get_logger().log_user("TopBar", "Pause button", "click", "Pause pressed")
+        self.complete_button.clicked.connect(
+            lambda: get_logger().log_user("TopBar", "Complete button", "click", "Complete pressed")
         )
         self.stop_button.clicked.connect(
             lambda: get_logger().log_user("TopBar", "Stop button", "click", "Stop pressed")
@@ -355,7 +355,7 @@ class ObserverControl(QObject):
 
                 if total_seconds >= time_limit_seconds:
                     self.stop_timer()
-                    self.pause_pressed.emit()
+                    self.complete_pressed.emit()
                     # get_logger().log_user("ObserverControl", "Session Timer", "stop", "Time limit reached, tasks stopped")
 
                     # Flash red

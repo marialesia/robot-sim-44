@@ -289,7 +289,7 @@ class SortingTask(BaseTask):
                 self.worker.start()
 
 
-    def pause(self):
+    def complete(self):
         # ===== stop motions =====
         self.conveyor.enable_motion(False)
 

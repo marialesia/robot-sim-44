@@ -65,13 +65,13 @@ class LayoutController:
                 else:
                     task.start()
 
-    def pause_tasks(self):
-        """Pause all tasks that have a 'pause' method', then write CSV log."""
+    def complete_tasks(self):
+        """Complete all tasks that have a 'complete' method', then write CSV log."""
         for task in self.task_manager.task_instances.values():
-            if hasattr(task, "pause"):
-                task.pause()
+            if hasattr(task, "complete"):
+                task.complete()
 
-        # --- Dump buffered events to CSV on Pause --- 
+        # --- Dump buffered events to CSV on Complete --- 
         path = get_logger().dump_csv()
         if self.status_label:
             if path:

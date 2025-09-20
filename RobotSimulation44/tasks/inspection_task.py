@@ -192,7 +192,7 @@ class InspectionTask(BaseTask):
         self.play_sound("conveyor")
 
 
-    def pause(self):
+    def complete(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
             self._box_timer.stop()
