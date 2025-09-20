@@ -83,6 +83,7 @@ class ObserverSystemWindow(QMainWindow):
                         "sorting": self.observer_control.get_params_for_task("sorting"),
                         "packaging": self.observer_control.get_params_for_task("packaging"),
                         "inspection": self.observer_control.get_params_for_task("inspection"),
+                        "sounds": self.observer_control.get_sounds_enabled(), 
                         "active": self.observer_control.get_active_tasks()
                     }
                 })

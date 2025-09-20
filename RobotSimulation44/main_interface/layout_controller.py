@@ -43,7 +43,13 @@ class LayoutController:
             )
 
     def start_tasks(self):
-        """Start all tasks that have a 'start' method."""
+        """Start all tasks that have a 'start' method and sync sound settings."""
+        sounds = {}
+        if self.observer_control:
+            # Get sounds from the observer control panel
+            sounds = self.observer_control.get_sounds_enabled()
+            self.task_manager.sounds_enabled.update(sounds)
+
         for task in self.task_manager.task_instances.values():
             if hasattr(task, "start"):
                 params = {}
@@ -51,7 +57,7 @@ class LayoutController:
                     # Give each task access to observer_control
                     task.observer_control = self.observer_control  
 
-                    # Check the task type
+                    # Fetch correct parameters for each task type
                     class_name = task.__class__.__name__
                     if class_name == "SortingTask":
                         params = self.observer_control.get_params_for_task("sorting")
@@ -59,6 +65,9 @@ class LayoutController:
                         params = self.observer_control.get_params_for_task("packaging")
                     elif class_name == "InspectionTask":
                         params = self.observer_control.get_params_for_task("inspection")
+
+                # Always inject sounds dict reference
+                task.sounds_enabled = self.task_manager.sounds_enabled
 
                 if params:
                     task.start(**params)

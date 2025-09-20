@@ -17,19 +17,14 @@ def main():
     # Assign observer control from observer window to user's layout controller
     user_window.layout_controller.observer_control = observer_window.observer_control
 
+    # Short alias for readability
+    oc = observer_window.observer_control
+
     # Connect signals AFTER assignment
-    observer_window.observer_control.tasks_changed.connect(
-        user_window.layout_controller.update_workspace
-    )
-    observer_window.observer_control.start_pressed.connect(
-        user_window.layout_controller.start_tasks
-    )
-    observer_window.observer_control.complete_pressed.connect(
-        user_window.layout_controller.complete_tasks
-    )
-    observer_window.observer_control.stop_pressed.connect(
-        user_window.layout_controller.stop_tasks
-    )
+    oc.tasks_changed.connect(user_window.layout_controller.update_workspace)
+    oc.start_pressed.connect(user_window.layout_controller.start_tasks)
+    oc.complete_pressed.connect(user_window.layout_controller.complete_tasks)
+    oc.stop_pressed.connect(user_window.layout_controller.stop_tasks)
 
     # Show windows
     user_window.show()
