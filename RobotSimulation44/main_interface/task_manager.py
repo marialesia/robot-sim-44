@@ -61,6 +61,9 @@ class TaskManager:
         # Update sounds if present
         if "sounds" in params:
             self.sounds_enabled.update(params["sounds"])
+            # --- Reinject latest sounds state into ALL tasks, not just new ones ---
+            for task in self.task_instances.values():
+                task.sounds_enabled = self.sounds_enabled
 
         # Update workspace
         if self.workspace_updater:
@@ -71,7 +74,7 @@ class TaskManager:
             task = self.task_instances.get(name)
             if not task:
                 continue
-            # keep sounds reference up-to-date
+            # ensure sounds reference is current
             task.sounds_enabled = self.sounds_enabled
             task_params = params.get(name, {})
             try:

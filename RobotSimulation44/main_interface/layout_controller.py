@@ -75,7 +75,7 @@ class LayoutController:
         path = get_logger().dump_csv()
         if self.status_label:
             if path:
-                self.status_label.setText(f"Complete. Log saved to: {path}")
+                self.status_label.setText(f"Complete. Log saved to observer device")
             else:
                 self.status_label.setText("Complete. (No events to log.)")
 

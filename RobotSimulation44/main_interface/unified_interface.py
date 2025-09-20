@@ -1,10 +1,11 @@
 # main_interface/unified_interface.py
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel
+from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QPushButton
 from PyQt5.QtCore import Qt
 from .task_manager import TaskManager
 from main_interface.observer_control import ObserverControl
 from main_interface.layout_controller import LayoutController
 from main_interface.metrics_manager import MetricsManager
+import os, subprocess, sys
 
 
 class UserSystemWindow(QMainWindow):
@@ -86,12 +87,28 @@ class ObserverSystemWindow(QMainWindow):
                     }
                 })
             )
-            # self.observer_control.pause_pressed.connect(lambda: self.server.send({"command": "pause"}))
             self.observer_control.stop_pressed.connect(lambda: self.server.send({"command": "stop"}))
 
         # Metrics manager
         self.metrics_manager = MetricsManager()
         self.main_layout.addWidget(self.metrics_manager)
 
+        # --- Log folder button ---
+        self.log_button = QPushButton("Open Log Folder")
+        self.log_button.clicked.connect(self.open_log_folder)
+        self.main_layout.addWidget(self.log_button)
+
         if hasattr(self.task_manager, "set_metrics_manager"):
             self.task_manager.set_metrics_manager(self.metrics_manager)
+
+    def open_log_folder(self):
+        """Opens the logs folder on the observers machine."""
+        log_dir = os.path.join(os.getcwd(), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+
+        if sys.platform.startswith("darwin"):   # macOS
+            subprocess.Popen(["open", log_dir])
+        elif os.name == "nt":                   # Windows
+            os.startfile(log_dir)
+        elif os.name == "posix":                # Linux
+            subprocess.Popen(["xdg-open", log_dir])
