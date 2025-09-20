@@ -389,7 +389,8 @@ class ObserverControl(QObject):
                 "enabled": self.inspection_checkbox.isChecked(),
                 "pace": self.insp_pace_dropdown.currentText(),
                 "error_rate": self.insp_error_slider.value(),
-            }
+            },
+            "sounds": self.get_sounds_enabled()
         }
 
         default_filename = f"{scenario_name}.json"
@@ -441,6 +442,14 @@ class ObserverControl(QObject):
             self.inspection_checkbox.setChecked(i.get("enabled", False))
             self.insp_pace_dropdown.setCurrentText(i.get("pace", "medium"))
             self.insp_error_slider.setValue(i.get("error_rate", 0))
+
+        # --- Sounds ---
+        sounds = params.get("sounds", {})
+        self.conveyor_checkbox.setChecked(sounds.get("conveyor", True))
+        self.robotic_arm_checkbox.setChecked(sounds.get("robotic_arm", True))
+        self.correct_checkbox.setChecked(sounds.get("correct_chime", True))
+        self.incorrect_checkbox.setChecked(sounds.get("incorrect_chime", True))
+        self.alarm_checkbox.setChecked(sounds.get("alarm", True))
 
         # Trigger task update
         self.update_tasks()
