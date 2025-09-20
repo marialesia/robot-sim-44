@@ -736,22 +736,28 @@ class InspectionTask(BaseTask):
             self._apply_flash_colors()
 
     def _on_metrics_live(self, metrics):
+        # Always include correction fields
+        metrics['insp_correction_rate'] = (
+            (self._correct_corrections / self._total_corrections) * 100
+            if self._total_corrections > 0 else 0.0
+        )
+        metrics['insp_corrections'] = self._correct_corrections
+
+        # Update local metrics manager
         if hasattr(self, "metrics_manager") and self.metrics_manager:
-            if self._total_corrections > 0:
-                metrics['insp_correction_rate'] = (self._correct_corrections / self._total_corrections) * 100
-                metrics['insp_corrections'] = self._correct_corrections
-            else:
-                metrics['insp_correction_rate'] = 0.0
-                metrics['insp_corrections'] = 0
             self.metrics_manager.update_metrics(metrics)
 
-        # --- log 3 core metrics every update ---
-        oc = getattr(self, "observer_control", None)  # injected from LayoutController
+        # Log to Observer
+        oc = getattr(self, "observer_control", None)
         if oc:
-            ts = oc.get_timestamp()  # MM:SS from ObserverControl timer
+            ts = oc.get_timestamp()
             logger = get_logger()
-
             logger.log_metric(ts, "inspection", "boxes inspected", metrics.get("insp_total", 0))
             logger.log_metric(ts, "inspection", "errors", metrics.get("insp_errors", 0))
             logger.log_metric(ts, "inspection", "errors corrected", self._correct_corrections)
+
+        # Forward over network
+        client = getattr(self, "network_client", None)
+        if client:
+            client.send({"command": "metrics", "data": metrics})
 

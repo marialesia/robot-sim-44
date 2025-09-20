@@ -5,6 +5,7 @@ from main_interface.unified_interface import ObserverSystemWindow
 from main_interface.task_manager import TaskManager
 from network.server import Server
 
+
 def main():
     app = QApplication(sys.argv)
 
@@ -41,8 +42,17 @@ def main():
     oc.pause_pressed.connect(lambda: server.send({"command": "pause"}))
     oc.stop_pressed.connect(lambda: server.send({"command": "stop"}))
 
+    # --- Handle incoming metrics from User ---
+    def handle_message(msg):
+        if msg.get("command") == "metrics":
+            data = msg.get("data", {})
+            observer_window.metrics_manager.update_metrics(data)
+
+    server.on_message = handle_message
+
     observer_window.show()
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()

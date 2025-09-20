@@ -6,11 +6,13 @@ from main_interface.unified_interface import UserSystemWindow
 from main_interface.task_manager import TaskManager
 from network.client import Client
 
+
 class UserMessageBridge(QObject):
     update_active = pyqtSignal(list)
     start_tasks = pyqtSignal(dict)
     pause_tasks = pyqtSignal()
     stop_tasks = pyqtSignal()
+
 
 def main():
     app = QApplication(sys.argv)
@@ -49,7 +51,11 @@ def main():
     client = Client(host="127.0.0.1", port=5000, on_message=handle_message)
     client.start()
 
+    # Inject network client into TaskManager so all tasks can send metrics
+    task_manager.set_network_client(client)
+
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()

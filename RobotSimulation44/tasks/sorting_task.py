@@ -981,22 +981,27 @@ class SortingTask(BaseTask):
 
 
     def _on_metrics_live(self, metrics):
+        # Always include correction fields
+        metrics['sort_correction_rate'] = (
+            (self._correct_corrections / self._total_corrections) * 100
+            if self._total_corrections > 0 else 0.0
+        )
+        metrics['sort_corrections'] = self._correct_corrections
+
+        # Update local metrics manager
         if hasattr(self, "metrics_manager") and self.metrics_manager:
-            # Update metrics manager as before
-            if self._total_corrections > 0:
-                metrics['sort_correction_rate'] = (self._correct_corrections / self._total_corrections) * 100
-                metrics['sort_corrections'] = self._correct_corrections
-            else:
-                metrics['sort_correction_rate'] = 0.0
-                metrics['sort_corrections'] = 0
             self.metrics_manager.update_metrics(metrics)
 
-        # --- log 3 core metrics every update ---
-        oc = getattr(self, "observer_control", None)  # injected from LayoutController
+        # Log to Observer
+        oc = getattr(self, "observer_control", None)
         if oc:
-            ts = oc.get_timestamp()  # MM:SS from ObserverControl timer
+            ts = oc.get_timestamp()
             logger = get_logger()
-
             logger.log_metric(ts, "sorting", "boxes sorted", metrics.get("sort_total", 0))
             logger.log_metric(ts, "sorting", "errors", metrics.get("sort_errors", 0))
             logger.log_metric(ts, "sorting", "errors corrected", self._correct_corrections)
+
+        # Forward over network
+        client = getattr(self, "network_client", None)
+        if client:
+            client.send({"command": "metrics", "data": metrics})

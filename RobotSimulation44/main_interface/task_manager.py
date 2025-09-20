@@ -10,6 +10,7 @@ class TaskManager:
         self.task_instances = {}
         self.metrics_manager = None
         self.workspace_updater = None
+        self.network_client = None  
 
     def get_task_panels(self, active_tasks):
         """Return the appropriate panels for the selected tasks."""
@@ -27,6 +28,8 @@ class TaskManager:
                 self.task_instances[name] = cls()
                 if self.metrics_manager:
                     self.task_instances[name].metrics_manager = self.metrics_manager
+                if self.network_client:   # inject network client
+                    self.task_instances[name].network_client = self.network_client
 
             # Mark enabled/disabled
             self.task_instances[name].enabled = name in active_tasks
@@ -42,6 +45,12 @@ class TaskManager:
     def set_workspace_updater(self, updater):
         """Inject LayoutController.update_workspace so we can refresh panels."""
         self.workspace_updater = updater
+
+    def set_network_client(self, client):
+        """Inject network client into all tasks."""
+        self.network_client = client
+        for t in self.task_instances.values():
+            t.network_client = client
 
     # --- Network-driven control methods ---
     def start_all_tasks(self, msg):
