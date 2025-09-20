@@ -316,6 +316,11 @@ class ObserverControl(QObject):
 
     # --- TIMER METHODS ---
     def start_timer(self):
+        # Stop any existing flash timer
+        if self.flash_timer:
+            self.flash_timer.stop()
+            self.flash_timer = None
+            self.timer_label.setStyleSheet("")
         # Reset timer
         self.elapsed_time = 0
         self.start_time = QTime.currentTime()
