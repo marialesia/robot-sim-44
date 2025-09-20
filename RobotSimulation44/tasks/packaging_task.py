@@ -1306,6 +1306,11 @@ class PackagingTask(BaseTask):
             logger.log_metric(ts, "packaging", "errors", metrics.get("pack_errors", 0))
             logger.log_metric(ts, "packaging", "errors corrected", self._correct_corrections)
 
+        # Forward over network
+        client = getattr(self, "network_client", None)
+        if client:
+            client.send({"command": "metrics", "data": metrics})
+
     def play_sound(self, sound_name):
         sounds_enabled = self.observer_control.get_sounds_enabled()
 
