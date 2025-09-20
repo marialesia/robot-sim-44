@@ -763,7 +763,8 @@ class InspectionTask(BaseTask):
 
 
     def play_sound(self, sound_name):
-        sounds_enabled = self.observer_control.get_sounds_enabled()
+        # Use injected sounds_enabled dict from TaskManager
+        sounds_enabled = getattr(self, "sounds_enabled", {}) or {}
 
         if sound_name == "conveyor" and sounds_enabled.get("conveyor", False):
             self.audio.start_conveyor()
@@ -775,4 +776,3 @@ class InspectionTask(BaseTask):
             self.audio.play_incorrect()
         elif sound_name == "alarm" and sounds_enabled.get("alarm", False):
             self.audio.start_alarm()
-

@@ -86,7 +86,7 @@ class ObserverSystemWindow(QMainWindow):
                     }
                 })
             )
-            self.observer_control.pause_pressed.connect(lambda: self.server.send({"command": "pause"}))
+            # self.observer_control.pause_pressed.connect(lambda: self.server.send({"command": "pause"}))
             self.observer_control.stop_pressed.connect(lambda: self.server.send({"command": "stop"}))
 
         # Metrics manager

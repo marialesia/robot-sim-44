@@ -6,17 +6,20 @@ from tasks.inspection_task import InspectionTask
 
 class TaskManager:
     def __init__(self):
-        # Store active task widget instances so we can start/stop them later
         self.task_instances = {}
         self.metrics_manager = None
         self.workspace_updater = None
-        self.network_client = None  
+        self.network_client = None
+        self.sounds_enabled = {    # always keep current sounds state
+            "conveyor": True,
+            "robotic_arm": True,
+            "correct_chime": True,
+            "incorrect_chime": True,
+            "alarm": True
+        }
 
     def get_task_panels(self, active_tasks):
-        """Return the appropriate panels for the selected tasks."""
         panels = []
-
-        # Ensure all known task types are considered
         all_tasks = {
             "sorting": SortingTask,
             "packaging": PackagingTask,
@@ -28,10 +31,11 @@ class TaskManager:
                 self.task_instances[name] = cls()
                 if self.metrics_manager:
                     self.task_instances[name].metrics_manager = self.metrics_manager
-                if self.network_client:   # inject network client
+                if self.network_client:
                     self.task_instances[name].network_client = self.network_client
+                # inject sounds_enabled reference
+                self.task_instances[name].sounds_enabled = self.sounds_enabled
 
-            # Mark enabled/disabled
             self.task_instances[name].enabled = name in active_tasks
 
             if name in active_tasks:
@@ -43,42 +47,32 @@ class TaskManager:
         self.metrics_manager = metrics_manager
 
     def set_workspace_updater(self, updater):
-        """Inject LayoutController.update_workspace so we can refresh panels."""
         self.workspace_updater = updater
 
     def set_network_client(self, client):
-        """Inject network client into all tasks."""
         self.network_client = client
         for t in self.task_instances.values():
             t.network_client = client
 
-    # --- Network-driven control methods ---
     def start_all_tasks(self, msg):
-        """
-        Called from the User side when Observer sends 'start'.
-        msg looks like:
-        {
-            "command": "start",
-            "params": {
-                "sorting": {...},
-                "packaging": {...},
-                "inspection": {...},
-                "active": ["sorting","packaging"]
-            }
-        }
-        """
         params = msg.get("params", {})
         active = params.get("active", [])
 
-        # Update workspace (so panels appear)
+        # Update sounds if present
+        if "sounds" in params:
+            self.sounds_enabled.update(params["sounds"])
+
+        # Update workspace
         if self.workspace_updater:
             self.workspace_updater(active)
 
-        # Start each enabled task with its parameters
+        # Start each active task
         for name in active:
             task = self.task_instances.get(name)
             if not task:
                 continue
+            # keep sounds reference up-to-date
+            task.sounds_enabled = self.sounds_enabled
             task_params = params.get(name, {})
             try:
                 task.start(**task_params)
@@ -86,13 +80,11 @@ class TaskManager:
                 task.start()
 
     def pause_all_tasks(self):
-        """Pause all tasks if they implement pause()."""
         for task in self.task_instances.values():
             if hasattr(task, "pause"):
                 task.pause()
 
     def stop_all_tasks(self):
-        """Stop all tasks if they implement stop()."""
         for task in self.task_instances.values():
             if hasattr(task, "stop"):
                 task.stop()
