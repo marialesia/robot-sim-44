@@ -5,6 +5,7 @@ from main_interface.unified_interface import ObserverSystemWindow
 from main_interface.task_manager import TaskManager
 from network.server import Server
 from event_logger import get_logger
+from network.discovery import DiscoveryBroadcaster
 
 
 def main():
@@ -86,6 +87,10 @@ def main():
                 logger.log_metric(ts, task, key, value)
 
     server.on_message = handle_message
+
+    # Start UDP broadcaster so users can auto-discover this observer
+    broadcaster = DiscoveryBroadcaster(interval=2)
+    broadcaster.start()
 
     observer_window.show()
     sys.exit(app.exec_())

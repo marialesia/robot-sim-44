@@ -1496,6 +1496,9 @@
   ('network.client',
    'D:\\Users\\Dre\\Source\\Repos\\robot-sim-44\\RobotSimulation44\\network\\client.py',
    'PYMODULE'),
+  ('network.discovery',
+   'D:\\Users\\Dre\\Source\\Repos\\robot-sim-44\\RobotSimulation44\\network\\discovery.py',
+   'PYMODULE'),
   ('nturl2path',
    'D:\\Program Files (x86)\\Microsoft Visual '
    'Studio\\Shared\\Python39_64\\lib\\nturl2path.py',

@@ -1,10 +1,10 @@
-# main_user.py
 import sys
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QApplication
 from main_interface.unified_interface import UserSystemWindow
 from main_interface.task_manager import TaskManager
 from network.client import Client
+from network.discovery import DiscoveryListener
 
 
 class UserMessageBridge(QObject):
@@ -45,10 +45,20 @@ def main():
         elif cmd == "complete":  
             user_window.layout_controller.complete_tasks()
 
-    client = Client(host="127.0.0.1", port=5000, on_message=handle_message)
-    client.start()
+    # --- listener is created here so we can reference it inside connect_to_observer ---
+    listener = DiscoveryListener(on_found=lambda ip, port: connect_to_observer(ip, port))
 
-    task_manager.set_network_client(client)
+    def connect_to_observer(ip, port):
+        print(f"[User] Found observer at {ip}:{port}")
+        client = Client(host=ip, port=port, on_message=handle_message)
+        client.start()
+        task_manager.set_network_client(client)
+
+        # Stop discovery once connected
+        listener.stop()
+
+    # Start listening for discovery broadcasts
+    listener.start()
 
     sys.exit(app.exec_())
 
