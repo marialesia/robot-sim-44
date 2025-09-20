@@ -249,6 +249,17 @@ class ObserverControl(QObject):
 
     def get_insp_error_rate(self):
         return self.insp_error_slider.value() / 100.0
+    
+    def get_active_tasks(self):
+        """Return list of task names that are enabled via checkboxes."""
+        active = []
+        if self.sorting_checkbox.isChecked():
+            active.append("sorting")
+        if self.packaging_checkbox.isChecked():
+            active.append("packaging")
+        if self.inspection_checkbox.isChecked():
+            active.append("inspection")
+        return active
 
     def get_params_for_task(self, task_name):
         """Return a dict of parameters for a given task name."""

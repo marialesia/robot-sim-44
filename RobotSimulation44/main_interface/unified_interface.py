@@ -2,9 +2,10 @@
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel
 from PyQt5.QtCore import Qt
 from .task_manager import TaskManager
-from .observer_control import ObserverControl
-from .layout_controller import LayoutController
-from .metrics_manager import MetricsManager
+from main_interface.observer_control import ObserverControl
+from main_interface.layout_controller import LayoutController
+from main_interface.metrics_manager import MetricsManager
+
 
 class UserSystemWindow(QMainWindow):
     def __init__(self, task_manager):
@@ -40,29 +41,57 @@ class UserSystemWindow(QMainWindow):
         self.layout_controller = LayoutController(self.main_layout, self.task_manager)
         self.layout_controller.set_status_label(self.status_label)
 
+        # --- let TaskManager update panels when network 'start' or 'update_active' comes in
+        if hasattr(self.task_manager, "set_workspace_updater"):
+            self.task_manager.set_workspace_updater(self.layout_controller.update_workspace)
 
 
 class ObserverSystemWindow(QMainWindow):
-    def __init__(self, task_manager):
+    def __init__(self, task_manager, server=None):
         super().__init__()
         self.setWindowTitle("Observer System")
         self.setGeometry(950, 100, 900, 800)
 
         self.task_manager = task_manager
+        self.server = server   # <--- store server reference
 
         # Central widget and layout
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         self.main_layout = QVBoxLayout(main_widget)
-        self.main_layout.setAlignment(Qt.AlignTop)  # <- top-align everything
+        self.main_layout.setAlignment(Qt.AlignTop)
 
-        # Observer controls (top)
+        # Observer controls
         self.observer_control = ObserverControl(self.main_layout)
 
-        # Metrics manager (immediately below)
+        # Hook control signals to network send
+        if self.server:
+            # --- Checkbox updates (send active immediately) ---
+            self.observer_control.tasks_changed.connect(
+                lambda active: self.server.send({
+                    "command": "update_active",
+                    "active": active
+                })
+            )
+
+            # --- Buttons ---
+            self.observer_control.start_pressed.connect(
+                lambda: self.server.send({
+                    "command": "start",
+                    "params": {
+                        "sorting": self.observer_control.get_params_for_task("sorting"),
+                        "packaging": self.observer_control.get_params_for_task("packaging"),
+                        "inspection": self.observer_control.get_params_for_task("inspection"),
+                        "active": self.observer_control.get_active_tasks()
+                    }
+                })
+            )
+            self.observer_control.pause_pressed.connect(lambda: self.server.send({"command": "pause"}))
+            self.observer_control.stop_pressed.connect(lambda: self.server.send({"command": "stop"}))
+
+        # Metrics manager
         self.metrics_manager = MetricsManager()
         self.main_layout.addWidget(self.metrics_manager)
 
-        # Pass the metrics manager down to task manager
         if hasattr(self.task_manager, "set_metrics_manager"):
             self.task_manager.set_metrics_manager(self.metrics_manager)
