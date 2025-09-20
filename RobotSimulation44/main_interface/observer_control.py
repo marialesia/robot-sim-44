@@ -14,8 +14,10 @@ class ObserverControl(QObject):
     pause_pressed = pyqtSignal()
     stop_pressed = pyqtSignal()
 
-    def __init__(self, parent_layout):
+    def __init__(self, parent_layout, audio_manager=None):
         super().__init__()
+
+        self.audio_manager = audio_manager
 
         # Create top control bar layout
         self.control_bar = QVBoxLayout()
@@ -176,6 +178,33 @@ class ObserverControl(QObject):
         self.control_bar.addLayout(tasks_row)
         parent_layout.addLayout(self.control_bar)
 
+        # --- Sound Controls group ---
+        sound_group = QGroupBox("Sound Controls")
+        sound_layout = QHBoxLayout()
+
+        self.conveyor_checkbox = QCheckBox("Conveyor")
+        self.conveyor_checkbox.setChecked(True)
+        sound_layout.addWidget(self.conveyor_checkbox)
+
+        self.robotic_arm_checkbox = QCheckBox("Robotic Arm")
+        self.robotic_arm_checkbox.setChecked(True)
+        sound_layout.addWidget(self.robotic_arm_checkbox)
+
+        self.correct_checkbox = QCheckBox("Correct Chime")
+        self.correct_checkbox.setChecked(True)
+        sound_layout.addWidget(self.correct_checkbox)
+
+        self.incorrect_checkbox = QCheckBox("Incorrect Chime")
+        self.incorrect_checkbox.setChecked(True)
+        sound_layout.addWidget(self.incorrect_checkbox)
+
+        self.alarm_checkbox = QCheckBox("Alarm")
+        self.alarm_checkbox.setChecked(True)
+        sound_layout.addWidget(self.alarm_checkbox)
+
+        sound_group.setLayout(sound_layout)
+        self.control_bar.addWidget(sound_group)
+
         # === Connections for checkboxes and task updates ===
         self.sorting_checkbox.stateChanged.connect(self.update_tasks)
         self.packaging_checkbox.stateChanged.connect(self.update_tasks)
@@ -274,6 +303,16 @@ class ObserverControl(QObject):
             }
         else:
             return {}
+
+    def get_sounds_enabled(self):
+        """Return a dict of which sounds are enabled."""
+        return {
+            "conveyor": self.conveyor_checkbox.isChecked(),
+            "robotic_arm": self.robotic_arm_checkbox.isChecked(),
+            "correct_chime": self.correct_checkbox.isChecked(),
+            "incorrect_chime": self.incorrect_checkbox.isChecked(),
+            "alarm": self.alarm_checkbox.isChecked()
+        }
 
     # --- TIMER METHODS ---
     def start_timer(self):

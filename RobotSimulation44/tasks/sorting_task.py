@@ -260,7 +260,7 @@ class SortingTask(BaseTask):
         self._pending_color = None
 
         # playing conveyor sound
-        self.audio.start_conveyor()
+        self.play_sound("conveyor")
 
         # start arm pick monitor
         if not self._pick_timer.isActive():
@@ -464,7 +464,7 @@ class SortingTask(BaseTask):
             elif self._pick_state == "descend":
                 # --- Trigger sorting only when arm reaches box ---
                 nearest_color = self._color_of_box_in_window()
-                self.audio.play_robotic_arm()
+                self.play_sound("robotic_arm")
                 if nearest_color:
                     hex_color = nearest_color.name() if hasattr(nearest_color, "name") else nearest_color
                     COLOR_MAP = {
@@ -797,7 +797,7 @@ class SortingTask(BaseTask):
         # --- Alarm logic (single place) ---
         if self._errors:
             if oldest_age >= 2.0 and not getattr(self, "_alarm_active", False):
-                self.audio.start_alarm()
+                self.play_sound("alarm")
                 self._alarm_active = True
         else:
             if getattr(self, "_alarm_active", False):
@@ -886,7 +886,7 @@ class SortingTask(BaseTask):
             del self._errors[eid]
 
             # Play correct chime
-            self.audio.play_correct()
+            self.play_sound("correct_chime")
         else:
             # Wrong placement — treat as permanently failed, clear the error too
             import time
@@ -906,7 +906,7 @@ class SortingTask(BaseTask):
                 del self._errors[eid]
 
             # Play incorrect chime here
-            self.audio.play_incorrect()
+            self.play_sound("incorrect_chime")
 
         # In either case, deselect after the drop
         self._selected_error = None
@@ -944,7 +944,7 @@ class SortingTask(BaseTask):
             print(msg)
             # get_logger().log_robot("Sorting", msg)
             # play a "correct" sound
-            self.audio.play_correct()
+            self.play_sound("correct_chime")
         else:
             wrong = self._present_slot_override or self._wrong_slot_for(color)
             self._present_slot_override = wrong
@@ -964,7 +964,7 @@ class SortingTask(BaseTask):
             # get_logger().log_robot("Sorting", msg)
 
             # play only the incorrect chime ONCE here
-            self.audio.play_incorrect()
+            self.play_sound("incorrect_chime")
 
             # Alarm will be started/stopped by _apply_flash_colors (after 2s if unresolved)
 
@@ -1000,3 +1000,17 @@ class SortingTask(BaseTask):
             logger.log_metric(ts, "sorting", "boxes sorted", metrics.get("sort_total", 0))
             logger.log_metric(ts, "sorting", "errors", metrics.get("sort_errors", 0))
             logger.log_metric(ts, "sorting", "errors corrected", self._correct_corrections)
+
+    def play_sound(self, sound_name):
+        sounds_enabled = self.observer_control.get_sounds_enabled()
+
+        if sound_name == "conveyor" and sounds_enabled.get("conveyor", False):
+            self.audio.start_conveyor()
+        elif sound_name == "robotic_arm" and sounds_enabled.get("robotic_arm", False):
+            self.audio.play_robotic_arm()
+        elif sound_name == "correct_chime" and sounds_enabled.get("correct_chime", False):
+            self.audio.play_correct()
+        elif sound_name == "incorrect_chime" and sounds_enabled.get("incorrect_chime", False):
+            self.audio.play_incorrect()
+        elif sound_name == "alarm" and sounds_enabled.get("alarm", False):
+            self.audio.start_alarm()
