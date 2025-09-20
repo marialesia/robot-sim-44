@@ -1,4 +1,3 @@
-# main_interface/observer_control.py
 from PyQt5.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QCheckBox, QPushButton,
     QComboBox, QLabel, QGroupBox, QFileDialog, QLineEdit, QSlider
@@ -54,6 +53,19 @@ class ObserverControl(QObject):
         # TIMER
         self.timer_label = QLabel("00:00")
         button_row.addWidget(self.timer_label)  
+
+        # --- Connection Status ---
+        self.connection_label = QLabel("Not connected")
+        self.connection_label.setStyleSheet("color: red; font-weight: bold;")
+        self.control_bar.addWidget(self.connection_label)
+
+        def set_connection_status(self, connected: bool):
+            if connected:
+                self.connection_label.setText("Connection successful")
+                self.connection_label.setStyleSheet("color: green; font-weight: bold;")
+            else:
+                self.connection_label.setText("Disconnected")
+                self.connection_label.setStyleSheet("color: red; font-weight: bold;")
 
         # Time Input handler
         self.time_limit_input.editingFinished.connect(self.format_time_input)
@@ -163,11 +175,6 @@ class ObserverControl(QObject):
         self.insp_pace_dropdown.addItems(["slow", "medium", "fast"])
         inspection_layout.addWidget(self.insp_pace_dropdown)
 
-        # inspection_layout.addWidget(QLabel("Bins:"))
-        # self.insp_bin_dropdown = QComboBox()
-        # self.insp_bin_dropdown.addItems(["2", "4", "6"])
-        # inspection_layout.addWidget(self.insp_bin_dropdown)
-
         inspection_layout.addWidget(QLabel("Error Rate:"))
         self.insp_error_slider, self.insp_error_input, slider_layout = create_slider_with_input()
         inspection_layout.addLayout(slider_layout)
@@ -219,30 +226,14 @@ class ObserverControl(QObject):
         self.save_button.clicked.connect(self.save_parameters)
         self.load_button.clicked.connect(self.load_parameters)
 
-        '''
-        # --- Logging for top bar user actions ---
-        self.start_button.clicked.connect(
-            lambda: get_logger().log_user("TopBar", "Start button", "click", "Start pressed")
-        )
-        self.complete_button.clicked.connect(
-            lambda: get_logger().log_user("TopBar", "Complete button", "click", "Complete pressed")
-        )
-        self.stop_button.clicked.connect(
-            lambda: get_logger().log_user("TopBar", "Stop button", "click", "Stop pressed")
-        )
-        self.sorting_checkbox.stateChanged.connect(
-            lambda s: get_logger().log_user("TopBar", "Sorting checkbox", "toggle",
-                                            "checked" if s else "unchecked")
-        )
-        self.packaging_checkbox.stateChanged.connect(
-            lambda s: get_logger().log_user("TopBar", "Packaging checkbox", "toggle",
-                                            "checked" if s else "unchecked")
-        )
-        self.inspection_checkbox.stateChanged.connect(
-            lambda s: get_logger().log_user("TopBar", "Inspection checkbox", "toggle",
-                                            "checked" if s else "unchecked")
-        )
-        '''
+    # --- Connection status updater ---
+    def set_connection_status(self, text, success=True):
+        """Update connection status text & colour."""
+        if success:
+            self.connection_label.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            self.connection_label.setStyleSheet("color: red; font-weight: bold;")
+        self.connection_label.setText(text)
 
     # --- Task getter functions ---
     def update_tasks(self):
@@ -300,14 +291,12 @@ class ObserverControl(QObject):
                 "error_rate": self.get_sort_error_rate(),
             }
         elif task_name == "packaging":
-            # return packaging-specific params
             return {
                 "pace": self.get_pack_pace(),
                 "error_rate": self.get_pack_error_rate(),
                 "limit": self.get_pack_limit(),
             }
         elif task_name == "inspection":
-            # return inspection-specific params
             return {
                 "pace": self.get_insp_pace(),
                 "error_rate": self.get_insp_error_rate(),
@@ -327,66 +316,49 @@ class ObserverControl(QObject):
 
     # --- TIMER METHODS ---
     def start_timer(self):
-        # Stop any existing flash timer
         if self.flash_timer:
             self.flash_timer.stop()
             self.flash_timer = None
             self.timer_label.setStyleSheet("")
-        # Reset timer
         self.elapsed_time = 0
         self.start_time = QTime.currentTime()
-        self.session_timer.start(1000)  # update every second
+        self.session_timer.start(1000)
         self.running = True
-        self.timer_label.setText("00:00")  # reset display
+        self.timer_label.setText("00:00")
         self.time_limit_input.setDisabled(True)
-        # Log start
-        # get_logger().log_user("ObserverControl", "Session Timer", "start", "Timer started")
 
     def stop_timer(self):
         if self.running:
-            # Pause and keep elapsed time 
             self.elapsed_time += self.start_time.secsTo(QTime.currentTime())
             self.session_timer.stop()
             self.running = False
             self.time_limit_input.setDisabled(False)
-            # Log stop
-            # get_logger().log_user("ObserverControl", "Session Timer", "stop", "Timer paused")
 
     def update_timer(self):
         if self.start_time and self.running:
             total_seconds = self.elapsed_time + self.start_time.secsTo(QTime.currentTime())
             mins, secs = divmod(total_seconds, 60)
-            self.timer_label.setText(f"{mins:02}:{secs:02}")  # MM:SS only
-
-            # --- Check for time limit ---
+            self.timer_label.setText(f"{mins:02}:{secs:02}")
             try:
-                # parse MM:SS from input
                 m, s = map(int, self.time_limit_input.text().split(":"))
                 time_limit_seconds = m * 60 + s
-
                 if total_seconds >= time_limit_seconds:
                     self.stop_timer()
                     self.complete_pressed.emit()
-                    # get_logger().log_user("ObserverControl", "Session Timer", "stop", "Time limit reached, tasks stopped")
-
-                    # Flash red
                     self.timer_label.setStyleSheet("color: red")
                     self.flash_count = 0
                     self.flash_timer = QTimer()
                     self.flash_timer.timeout.connect(self._flash_timer_label)
                     self.flash_timer.start(500)
             except ValueError:
-                pass  # ignore invalid input
-    
+                pass
+
     def get_timestamp(self):
-        """Return current session time as MM:SS string."""
         return self.timer_label.text()
 
     # --- SAVE / LOAD FUNCTIONS ---
     def save_parameters(self):
-        """Save current dropdown selections, checkbox states, scenario name, and time limit to a JSON file."""
         scenario_name = self.scenario_name_input.text().strip() or "Unnamed_Scenario"
-
         params = {
             "scenario_name": scenario_name,
             "time_limit": self.time_limit_input.text().strip() or "00:00",
@@ -408,71 +380,49 @@ class ObserverControl(QObject):
             },
             "sounds": self.get_sounds_enabled()
         }
-
         default_filename = f"{scenario_name}.json"
         file_path, _ = QFileDialog.getSaveFileName(
-            None,
-            "Save Parameters",
-            default_filename,
-            "JSON Files (*.json)"
+            None, "Save Parameters", default_filename, "JSON Files (*.json)"
         )
-
         if file_path:
             with open(file_path, "w") as f:
                 json.dump(params, f, indent=4)
             print(f"Parameters saved to {file_path} with scenario name '{scenario_name}'")
 
     def load_parameters(self):
-        """Load dropdown selections, checkbox states, scenario name, and time limit from a JSON file."""
         file_path, _ = QFileDialog.getOpenFileName(None, "Load Parameters", "", "JSON Files (*.json)")
         if not file_path:
             return
-
         with open(file_path, "r") as f:
             params = json.load(f)
-
-        # --- Scenario Name ---
         self.scenario_name_input.setText(params.get("scenario_name", ""))
-
-        # --- Time Limit ---
         self.time_limit_input.setText(params.get("time_limit", "00:00"))
-
-        # --- Sorting ---
         if "sorting" in params:
             s = params["sorting"]
             self.sorting_checkbox.setChecked(s.get("enabled", False))
             self.sort_pace_dropdown.setCurrentText(s.get("pace", "medium"))
             self.sort_bin_dropdown.setCurrentText(s.get("bin_count", "2"))
             self.sort_error_slider.setValue(s.get("error_rate", 0))
-
-        # --- Packaging ---
         if "packaging" in params:
             p = params["packaging"]
             self.packaging_checkbox.setChecked(p.get("enabled", False))
             self.pack_pace_dropdown.setCurrentText(p.get("pace", "medium"))
             self.pack_error_slider.setValue(p.get("error_rate", 0))
-
-        # --- Inspection ---
         if "inspection" in params:
             i = params["inspection"]
             self.inspection_checkbox.setChecked(i.get("enabled", False))
             self.insp_pace_dropdown.setCurrentText(i.get("pace", "medium"))
             self.insp_error_slider.setValue(i.get("error_rate", 0))
-
-        # --- Sounds ---
         sounds = params.get("sounds", {})
         self.conveyor_checkbox.setChecked(sounds.get("conveyor", True))
         self.robotic_arm_checkbox.setChecked(sounds.get("robotic_arm", True))
         self.correct_checkbox.setChecked(sounds.get("correct_chime", True))
         self.incorrect_checkbox.setChecked(sounds.get("incorrect_chime", True))
         self.alarm_checkbox.setChecked(sounds.get("alarm", True))
-
-        # Trigger task update
         self.update_tasks()
         print(f"Parameters loaded from {file_path}")
 
     def format_time_input(self):
-        """Formats user input as MM:SS."""
         text = self.time_limit_input.text().strip()
         if not text:
             self.time_limit_input.setText("00:00")
@@ -481,19 +431,18 @@ class ObserverControl(QObject):
             if ":" in text:
                 parts = list(map(int, text.split(":")))
                 while len(parts) < 2:
-                    parts.insert(0, 0)  # pad missing minutes
+                    parts.insert(0, 0)
                 m, s = parts
             else:
-                # just minutes entered
                 m, s = int(text), 0
-            m = max(0, min(m, 99))  # clamp minutes to 0-99
-            s = max(0, min(s, 59))  # clamp seconds
+            m = max(0, min(m, 99))
+            s = max(0, min(s, 59))
             self.time_limit_input.setText(f"{m:02}:{s:02}")
         except ValueError:
             self.time_limit_input.setText("00:00")
 
     def _flash_timer_label(self):
-        if self.flash_count >= 100:  # flash 50 times - can be changed
+        if self.flash_count >= 100:
             if self.flash_timer:
                 self.flash_timer.stop()
             self.timer_label.setStyleSheet("")

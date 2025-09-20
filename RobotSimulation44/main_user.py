@@ -1,6 +1,8 @@
+# main_user.py
 import sys
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import Qt
 from main_interface.unified_interface import UserSystemWindow
 from main_interface.task_manager import TaskManager
 from network.client import Client
@@ -15,6 +17,9 @@ class UserMessageBridge(QObject):
 
 
 def main():
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
     app = QApplication(sys.argv)
 
     task_manager = TaskManager()

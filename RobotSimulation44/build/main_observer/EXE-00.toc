@@ -1,8 +1,8 @@
 ('D:\\Users\\Dre\\Source\\Repos\\robot-sim-44\\RobotSimulation44\\build\\main_observer\\main_observer.exe',
- False,
+ True,
  False,
  True,
- 'C:\\Users\\Dre\\AppData\\Roaming\\Python\\Python39\\site-packages\\PyInstaller\\bootloader\\images\\icon-windowed.ico',
+ 'C:\\Users\\Dre\\AppData\\Roaming\\Python\\Python39\\site-packages\\PyInstaller\\bootloader\\images\\icon-console.ico',
  None,
  False,
  False,
@@ -73,9 +73,9 @@
  [],
  False,
  False,
- 1758373127,
- [('runw.exe',
-   'C:\\Users\\Dre\\AppData\\Roaming\\Python\\Python39\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\runw.exe',
+ 1758384823,
+ [('run.exe',
+   'C:\\Users\\Dre\\AppData\\Roaming\\Python\\Python39\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\run.exe',
    'EXECUTABLE')],
  'D:\\Program Files (x86)\\Microsoft Visual '
  'Studio\\Shared\\Python39_64\\python39.dll')

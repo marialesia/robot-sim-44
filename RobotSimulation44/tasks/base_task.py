@@ -1,5 +1,5 @@
 ﻿# tasks/base_task.py
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout, QApplication
 from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, QTimer, pyqtProperty
 
@@ -167,8 +167,19 @@ class RobotArmWidget(QWidget):
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(220, 140)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        screen = QApplication.primaryScreen()
+        size = screen.size()
+        w = size.width()
+
+        if w >= 2560:       # 1440p+
+            self.setMinimumSize(220, 140)
+        elif w >= 1920:     # 1080p
+            self.setMinimumSize(220, 140)
+        elif w >= 1366:     # 720p-ish
+            self.setMinimumSize(150, 100)
+        else:
+            self.setMinimumSize(130, 90)
 
         # Pose (can be overridden per task)
         self.shoulder_angle = -90.0
@@ -296,8 +307,19 @@ class StorageContainerWidget(QWidget):
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(110, 110) # change the size of the containers here (width, height)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        screen = QApplication.primaryScreen()
+        size = screen.size()
+        w = size.width()
+
+        if w >= 2560:       # 1440p+
+            self.setMinimumSize(110, 110)
+        elif w >= 1920:     # 1080p
+            self.setMinimumSize(80, 80)
+        elif w >= 1366:     # 720p-ish
+            self.setMinimumSize(60, 60)
+        else:
+            self.setMinimumSize(60, 60)
 
         # Palette (override per task)
         self.border = QColor("#2a7a4b")
@@ -383,8 +405,20 @@ class BaseTask(QWidget):
             "}"
         )
 
-        self.scene.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.scene.setMinimumSize(1200, 350)
+        # ---- dynamic minimum size by screen ----
+        screen = QApplication.primaryScreen()
+        size = screen.size()
+        w, h = size.width(), size.height()
+
+        if w >= 2560:       # 1440p or higher
+            self.scene.setMinimumSize(1200, 350)
+        elif w >= 1920:     # 1080p
+            self.scene.setMinimumSize(900, 260)
+        elif w >= 1366:     # 720p-ish
+            self.scene.setMinimumSize(700, 200)
+        else:               # fallback for smaller
+            self.scene.setMinimumSize(600, 180)
+
         outer.addWidget(self.scene)
 
         # ---- Grid layout for flexible placement ----

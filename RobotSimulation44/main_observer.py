@@ -7,22 +7,53 @@ from network.server import Server
 from event_logger import get_logger
 from network.discovery import DiscoveryBroadcaster
 
-
 def main():
     app = QApplication(sys.argv)
 
-    # Shared task manager (used for metrics on observer side only)
     task_manager = TaskManager()
 
-    # Start server
-    server = Server(port=5000)
+    # Create Observer window first (so we can pass it to server callbacks)
+    observer_window = ObserverSystemWindow(task_manager)
+    oc = observer_window.observer_control
+
+    # --- Handle incoming messages from User ---
+    def handle_message(msg):
+        if msg.get("command") == "metrics":
+            data = msg.get("data", {})
+            observer_window.metrics_manager.update_metrics(data)
+            ts = oc.get_timestamp()
+            logger = get_logger()
+            for key, value in data.items():
+                if key.startswith("sort_"):
+                    task = "sorting"
+                elif key.startswith("pack_"):
+                    task = "packaging"
+                elif key.startswith("insp_"):
+                    task = "inspection"
+                else:
+                    task = "general"
+                logger.log_metric(ts, task, key, value)
+
+    # --- Connection hooks ---
+    def on_client_connect(addr):
+        print(f"[Observer] Connection successful: {addr}")
+        oc.set_connection_status("Connection Successful", success=True)
+
+    def on_client_disconnect():
+        print("[Observer] Client disconnected")
+        oc.set_connection_status("Disconnected", success=False)
+
+    # Start server with callbacks
+    server = Server(
+        port=5000,
+        on_message=handle_message,
+        on_connect=on_client_connect,
+        on_disconnect=on_client_disconnect
+    )
     server.start()
 
-    # Create Observer window
-    observer_window = ObserverSystemWindow(task_manager, server=server)
-
-    # --- Hook ObserverControl signals to network ---
-    oc = observer_window.observer_control
+    # Give Observer window access to server
+    observer_window.server = server
 
     # When checkboxes change -> tell User to update workspace
     oc.tasks_changed.connect(
@@ -46,7 +77,6 @@ def main():
     # Complete button (or timer expiry)
     def complete_handler():
         server.send({"command": "complete"})
-        # Dump metrics to CSV when completing
         path = get_logger().dump_csv()
         if path:
             print(f"[Observer] Metrics saved to {path}")
@@ -57,7 +87,6 @@ def main():
     # Stop button
     def stop_handler():
         server.send({"command": "stop"})
-        # Dump metrics to CSV when stopping
         path = get_logger().dump_csv()
         if path:
             print(f"[Observer] Metrics saved to {path}")
@@ -65,36 +94,12 @@ def main():
 
     oc.stop_pressed.connect(stop_handler)
 
-    # --- Handle incoming metrics from User ---
-    def handle_message(msg):
-        if msg.get("command") == "metrics":
-            data = msg.get("data", {})
-            observer_window.metrics_manager.update_metrics(data)
-
-            # Log metrics centrally on Observer
-            ts = oc.get_timestamp()
-            logger = get_logger()
-            for key, value in data.items():
-                # Use task prefix convention if present (e.g., sort_total, pack_errors, insp_corrections)
-                if key.startswith("sort_"):
-                    task = "sorting"
-                elif key.startswith("pack_"):
-                    task = "packaging"
-                elif key.startswith("insp_"):
-                    task = "inspection"
-                else:
-                    task = "general"
-                logger.log_metric(ts, task, key, value)
-
-    server.on_message = handle_message
-
-    # Start UDP broadcaster so users can auto-discover this observer
+    # Start UDP broadcaster
     broadcaster = DiscoveryBroadcaster(interval=2)
     broadcaster.start()
 
     observer_window.show()
     sys.exit(app.exec_())
-
 
 if __name__ == "__main__":
     main()
