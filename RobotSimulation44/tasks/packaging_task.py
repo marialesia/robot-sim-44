@@ -318,7 +318,7 @@ class PackagingTask(BaseTask):
         has_err, oldest_age = self._any_error_and_oldest_age()
         if has_err:
             if oldest_age >= 2.0 and not self._alarm_active:
-                self.audio.start_alarm()
+                self.play_sound("alarm")
                 self._alarm_active = True
         else:
             if self._alarm_active:
@@ -498,9 +498,8 @@ class PackagingTask(BaseTask):
         if active["fading"]:
             return
 
-        # audio at pack
         try:
-            self.audio.play_robotic_arm()
+            self.play_sound("robotic_arm")
         except Exception:
             pass
 
@@ -534,7 +533,7 @@ class PackagingTask(BaseTask):
 
             try:
                 # Play incorrect chime immediately (alarm handled later by _update_alarm_state)
-                self.audio.play_incorrect()
+                self.play_sound("incorrect_chime")
             except Exception:
                 pass
             self._apply_error_visuals()
@@ -543,7 +542,7 @@ class PackagingTask(BaseTask):
         else:
             # Correct placement
             try:
-                self.audio.play_correct()
+                self.play_sound("correct_chime")
             except Exception:
                 pass
 
@@ -773,7 +772,7 @@ class PackagingTask(BaseTask):
         self.conveyor.enable_motion(True)
         # conveyor audio
         try:
-            self.audio.start_conveyor()
+            self.play_sound("conveyor")
         except Exception:
             pass
 
@@ -863,7 +862,7 @@ class PackagingTask(BaseTask):
             pass
 
 
-    def pause(self):
+    def complete(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
             self._box_timer.stop()
@@ -1015,7 +1014,7 @@ class PackagingTask(BaseTask):
             elif self._pick_state == "descend":
                 # play robotic arm sound as it reaches the box
                 try:
-                    self.audio.play_robotic_arm()
+                    self.play_sound("robotic_arm")
                 except Exception:
                     pass
                 c = self._color_of_box_in_window()
@@ -1181,7 +1180,7 @@ class PackagingTask(BaseTask):
         if target_color == expected:
             self._correct_corrections += 1
             try:
-                self.audio.play_correct()
+                self.play_sound("correct_chime")
             except Exception:
                 pass
             try:
@@ -1191,7 +1190,7 @@ class PackagingTask(BaseTask):
         else:
             # Wrong drop target: we still consumed one wrong item from the front
             try:
-                self.audio.play_incorrect()
+                self.play_sound("incorrect_chime")
             except Exception:
                 pass
             try:
@@ -1307,7 +1306,17 @@ class PackagingTask(BaseTask):
             logger.log_metric(ts, "packaging", "errors", metrics.get("pack_errors", 0))
             logger.log_metric(ts, "packaging", "errors corrected", self._correct_corrections)
 
-        # Forward over network
-        client = getattr(self, "network_client", None)
-        if client:
-            client.send({"command": "metrics", "data": metrics})
+    def play_sound(self, sound_name):
+        sounds_enabled = self.observer_control.get_sounds_enabled()
+
+        if sound_name == "conveyor" and sounds_enabled.get("conveyor", False):
+            self.audio.start_conveyor()
+        elif sound_name == "robotic_arm" and sounds_enabled.get("robotic_arm", False):
+            self.audio.play_robotic_arm()
+        elif sound_name == "correct_chime" and sounds_enabled.get("correct_chime", False):
+            self.audio.play_correct()
+        elif sound_name == "incorrect_chime" and sounds_enabled.get("incorrect_chime", False):
+            self.audio.play_incorrect()
+        elif sound_name == "alarm" and sounds_enabled.get("alarm", False):
+            self.audio.start_alarm()
+

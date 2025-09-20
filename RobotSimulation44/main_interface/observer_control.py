@@ -11,11 +11,13 @@ class ObserverControl(QObject):
     # Signals to communicate with layout controller
     tasks_changed = pyqtSignal(list)
     start_pressed = pyqtSignal()
-    pause_pressed = pyqtSignal()
+    complete_pressed = pyqtSignal()
     stop_pressed = pyqtSignal()
 
-    def __init__(self, parent_layout):
+    def __init__(self, parent_layout, audio_manager=None):
         super().__init__()
+
+        self.audio_manager = audio_manager
 
         # Create top control bar layout
         self.control_bar = QVBoxLayout()
@@ -32,7 +34,7 @@ class ObserverControl(QObject):
         button_row = QHBoxLayout()
         button_row.addStretch(1)
         self.start_button = QPushButton("Start")
-        self.pause_button = QPushButton("Pause")
+        self.complete_button = QPushButton("Complete")
         self.stop_button = QPushButton("Stop")
         # --- New Save / Load buttons ---
         self.save_button = QPushButton("Save Params")
@@ -42,7 +44,7 @@ class ObserverControl(QObject):
         self.time_limit_input.setPlaceholderText("Time Limit")
         self.time_limit_input.setFixedWidth(70)
         button_row.addWidget(self.start_button)
-        # button_row.addWidget(self.pause_button)
+        # button_row.addWidget(self.complete_button)
         button_row.addWidget(self.stop_button)
         button_row.addWidget(self.save_button)
         button_row.addWidget(self.load_button)
@@ -176,14 +178,41 @@ class ObserverControl(QObject):
         self.control_bar.addLayout(tasks_row)
         parent_layout.addLayout(self.control_bar)
 
+        # --- Sound Controls group ---
+        sound_group = QGroupBox("Sound Controls")
+        sound_layout = QHBoxLayout()
+
+        self.conveyor_checkbox = QCheckBox("Conveyor")
+        self.conveyor_checkbox.setChecked(True)
+        sound_layout.addWidget(self.conveyor_checkbox)
+
+        self.robotic_arm_checkbox = QCheckBox("Robotic Arm")
+        self.robotic_arm_checkbox.setChecked(True)
+        sound_layout.addWidget(self.robotic_arm_checkbox)
+
+        self.correct_checkbox = QCheckBox("Correct Chime")
+        self.correct_checkbox.setChecked(True)
+        sound_layout.addWidget(self.correct_checkbox)
+
+        self.incorrect_checkbox = QCheckBox("Incorrect Chime")
+        self.incorrect_checkbox.setChecked(True)
+        sound_layout.addWidget(self.incorrect_checkbox)
+
+        self.alarm_checkbox = QCheckBox("Alarm")
+        self.alarm_checkbox.setChecked(True)
+        sound_layout.addWidget(self.alarm_checkbox)
+
+        sound_group.setLayout(sound_layout)
+        self.control_bar.addWidget(sound_group)
+
         # === Connections for checkboxes and task updates ===
         self.sorting_checkbox.stateChanged.connect(self.update_tasks)
         self.packaging_checkbox.stateChanged.connect(self.update_tasks)
         self.inspection_checkbox.stateChanged.connect(self.update_tasks)
 
-        # === Connections for start/pause/stop buttons ===
+        # === Connections for start/stop buttons ===
         self.start_button.clicked.connect(lambda: self.start_pressed.emit())
-        self.pause_button.clicked.connect(lambda: self.pause_pressed.emit())
+        self.complete_button.clicked.connect(lambda: self.complete_pressed.emit())
         self.stop_button.clicked.connect(lambda: self.stop_pressed.emit())
 
         # === Connections for save/load buttons ===
@@ -195,8 +224,8 @@ class ObserverControl(QObject):
         self.start_button.clicked.connect(
             lambda: get_logger().log_user("TopBar", "Start button", "click", "Start pressed")
         )
-        self.pause_button.clicked.connect(
-            lambda: get_logger().log_user("TopBar", "Pause button", "click", "Pause pressed")
+        self.complete_button.clicked.connect(
+            lambda: get_logger().log_user("TopBar", "Complete button", "click", "Complete pressed")
         )
         self.stop_button.clicked.connect(
             lambda: get_logger().log_user("TopBar", "Stop button", "click", "Stop pressed")
@@ -286,8 +315,23 @@ class ObserverControl(QObject):
         else:
             return {}
 
+    def get_sounds_enabled(self):
+        """Return a dict of which sounds are enabled."""
+        return {
+            "conveyor": self.conveyor_checkbox.isChecked(),
+            "robotic_arm": self.robotic_arm_checkbox.isChecked(),
+            "correct_chime": self.correct_checkbox.isChecked(),
+            "incorrect_chime": self.incorrect_checkbox.isChecked(),
+            "alarm": self.alarm_checkbox.isChecked()
+        }
+
     # --- TIMER METHODS ---
     def start_timer(self):
+        # Stop any existing flash timer
+        if self.flash_timer:
+            self.flash_timer.stop()
+            self.flash_timer = None
+            self.timer_label.setStyleSheet("")
         # Reset timer
         self.elapsed_time = 0
         self.start_time = QTime.currentTime()
@@ -322,7 +366,7 @@ class ObserverControl(QObject):
 
                 if total_seconds >= time_limit_seconds:
                     self.stop_timer()
-                    self.pause_pressed.emit()
+                    self.complete_pressed.emit()
                     # get_logger().log_user("ObserverControl", "Session Timer", "stop", "Time limit reached, tasks stopped")
 
                     # Flash red
@@ -361,7 +405,8 @@ class ObserverControl(QObject):
                 "enabled": self.inspection_checkbox.isChecked(),
                 "pace": self.insp_pace_dropdown.currentText(),
                 "error_rate": self.insp_error_slider.value(),
-            }
+            },
+            "sounds": self.get_sounds_enabled()
         }
 
         default_filename = f"{scenario_name}.json"
@@ -413,6 +458,14 @@ class ObserverControl(QObject):
             self.inspection_checkbox.setChecked(i.get("enabled", False))
             self.insp_pace_dropdown.setCurrentText(i.get("pace", "medium"))
             self.insp_error_slider.setValue(i.get("error_rate", 0))
+
+        # --- Sounds ---
+        sounds = params.get("sounds", {})
+        self.conveyor_checkbox.setChecked(sounds.get("conveyor", True))
+        self.robotic_arm_checkbox.setChecked(sounds.get("robotic_arm", True))
+        self.correct_checkbox.setChecked(sounds.get("correct_chime", True))
+        self.incorrect_checkbox.setChecked(sounds.get("incorrect_chime", True))
+        self.alarm_checkbox.setChecked(sounds.get("alarm", True))
 
         # Trigger task update
         self.update_tasks()

@@ -70,7 +70,7 @@ class InspectionWorker(QThread):
             "insp_error_rate": (self.errors / self.total) * 100 if self.total else 0
         })
 
-    def pause(self):
+    def complete(self):
         self.running = False
 
     def stop(self):

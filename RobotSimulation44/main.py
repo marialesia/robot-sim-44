@@ -24,8 +24,8 @@ def main():
     observer_window.observer_control.start_pressed.connect(
         user_window.layout_controller.start_tasks
     )
-    observer_window.observer_control.pause_pressed.connect(
-        user_window.layout_controller.pause_tasks
+    observer_window.observer_control.complete_pressed.connect(
+        user_window.layout_controller.complete_tasks
     )
     observer_window.observer_control.stop_pressed.connect(
         user_window.layout_controller.stop_tasks

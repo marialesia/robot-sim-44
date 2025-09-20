@@ -189,10 +189,10 @@ class InspectionTask(BaseTask):
                 self.worker.start()
     
         # Playing conveyor sound
-        self.audio.start_conveyor()
+        self.play_sound("conveyor")
 
 
-    def pause(self):
+    def complete(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
             self._box_timer.stop()
@@ -339,7 +339,7 @@ class InspectionTask(BaseTask):
                     self.worker.sort_box(COLOR_MAP.get(hex_color, "green"))
 
                 # play robotic arm audio
-                self.audio.play_robotic_arm()
+                self.play_sound("robotic_arm")
 
                 self._pick_state = "hold"
                 c = self._color_of_box_in_window() or self._pending_color
@@ -614,7 +614,7 @@ class InspectionTask(BaseTask):
                 if age > oldest_age:
                     oldest_age = age
             if oldest_age >= 2.0:
-                self.audio.start_alarm()
+                self.play_sound("alarm")
                 self._alarm_active = True
         elif not self._errors and self._alarm_active:
             self.audio.stop_alarm()
@@ -680,7 +680,7 @@ class InspectionTask(BaseTask):
             print(f"Inspection Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
             if eid in self._errors:
                 del self._errors[eid]
-            self.audio.play_correct()
+            self.play_sound("correct_chime")
             if not self._errors and self._alarm_active:
                 self.audio.stop_alarm()
                 self._alarm_active = False
@@ -689,7 +689,7 @@ class InspectionTask(BaseTask):
             print(f"Inspection Task: Error #{eid} placed incorrectly in {new_slot} and cleared (was {rec['actual']})")
             if eid in self._errors:
                 del self._errors[eid]
-            self.audio.play_incorrect()
+            self.play_sound("incorrect_chime")
 
         # End drag + deselect
         self._selected_error = None
@@ -713,7 +713,7 @@ class InspectionTask(BaseTask):
             msg = f"Inspection Task: sorted {color} into {into} - correct"
             print(msg)
             # get_logger().log_robot("Inspection", msg)
-            self.audio.play_correct()
+            self.play_sound("correct_chime")
 
         else:
             wrong = "red" if color == "green" else "green"
@@ -731,7 +731,7 @@ class InspectionTask(BaseTask):
             print(msg)
             # get_logger().log_robot("Inspection", msg)
 
-            self.audio.play_incorrect()
+            self.play_sound("incorrect_chime")
 
             self._apply_flash_colors()
 
@@ -756,8 +756,17 @@ class InspectionTask(BaseTask):
             logger.log_metric(ts, "inspection", "errors", metrics.get("insp_errors", 0))
             logger.log_metric(ts, "inspection", "errors corrected", self._correct_corrections)
 
-        # Forward over network
-        client = getattr(self, "network_client", None)
-        if client:
-            client.send({"command": "metrics", "data": metrics})
+    def play_sound(self, sound_name):
+        sounds_enabled = self.observer_control.get_sounds_enabled()
+
+        if sound_name == "conveyor" and sounds_enabled.get("conveyor", False):
+            self.audio.start_conveyor()
+        elif sound_name == "robotic_arm" and sounds_enabled.get("robotic_arm", False):
+            self.audio.play_robotic_arm()
+        elif sound_name == "correct_chime" and sounds_enabled.get("correct_chime", False):
+            self.audio.play_correct()
+        elif sound_name == "incorrect_chime" and sounds_enabled.get("incorrect_chime", False):
+            self.audio.play_incorrect()
+        elif sound_name == "alarm" and sounds_enabled.get("alarm", False):
+            self.audio.start_alarm()
 

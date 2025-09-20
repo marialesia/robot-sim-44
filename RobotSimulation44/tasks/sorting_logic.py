@@ -47,7 +47,7 @@ class SortingWorker(QThread):
         self.correct = 0
         self.errors = 0
 
-        self.total_elapsed = 0.0  # accumulate across pauses
+        self.total_elapsed = 0.0  # accumulate
 
         # store spawned boxes
         self.spawned_boxes = []
@@ -87,7 +87,7 @@ class SortingWorker(QThread):
             "sort_error_rate": (self.errors / self.total) * 100 if self.total else 0
         })
 
-    def pause(self):
+    def complete(self):
         self.running = False
 
     def stop(self):

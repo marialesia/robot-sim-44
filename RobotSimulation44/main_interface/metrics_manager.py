@@ -13,7 +13,7 @@ class MetricsManager(QWidget):
         main_layout = QHBoxLayout()   # 3 columns side by side
         main_layout.setAlignment(Qt.AlignTop)
 
-        # --- Sorting Metrics ---
+                # --- Sorting Metrics ---
         sorting_box = QGroupBox("Sorting Metrics")
         sorting_layout = QVBoxLayout()
 
@@ -31,11 +31,14 @@ class MetricsManager(QWidget):
             sorting_layout.addWidget(lbl)
 
         # Graph for Sorting
-        self.sort_fig = Figure(figsize=(3, 2), facecolor="#f9f9f9")
+        self.sort_fig = Figure(figsize=(3, 2.5), facecolor="#f9f9f9")
+        self.sort_fig.subplots_adjust(left=0.17, bottom=0.20, right=0.95)
         self.sort_canvas = FigureCanvas(self.sort_fig)
         self.sort_ax = self.sort_fig.add_subplot(111)
         self.sort_ax.tick_params(labelsize=8)
         self.sort_ax.set_facecolor("#f9f9f9")
+        self.sort_ax.set_xlabel("Time (secs)", fontsize=7)
+        self.sort_ax.set_ylabel("Errors", fontsize=7)
         self.sort_errors_data = []
         self.sort_corrections_data = []
         self.sort_times = []
@@ -74,11 +77,14 @@ class MetricsManager(QWidget):
             packaging_layout.addWidget(lbl)
 
         # Graph for Packaging
-        self.pack_fig = Figure(figsize=(3, 2), facecolor="#f9f9f9")
+        self.pack_fig = Figure(figsize=(3, 2.5), facecolor="#f9f9f9")
+        self.pack_fig.subplots_adjust(left=0.17, bottom=0.20, right=0.95)
         self.pack_canvas = FigureCanvas(self.pack_fig)
         self.pack_ax = self.pack_fig.add_subplot(111)
         self.pack_ax.tick_params(labelsize=8)
         self.pack_ax.set_facecolor("#f9f9f9")
+        self.pack_ax.set_xlabel("Time (secs)", fontsize=7)
+        self.pack_ax.set_ylabel("Errors", fontsize=7)
         self.pack_errors_data = []
         self.pack_corrections_data = []
         self.pack_times = []
@@ -117,11 +123,14 @@ class MetricsManager(QWidget):
             inspection_layout.addWidget(lbl)
 
         # Graph for Inspection
-        self.insp_fig = Figure(figsize=(3, 2), facecolor="#f9f9f9")
+        self.insp_fig = Figure(figsize=(3, 2.5), facecolor="#f9f9f9")
+        self.insp_fig.subplots_adjust(left=0.17, bottom=0.20, right=0.95)
         self.insp_canvas = FigureCanvas(self.insp_fig)
         self.insp_ax = self.insp_fig.add_subplot(111)
         self.insp_ax.tick_params(labelsize=8)
         self.insp_ax.set_facecolor("#f9f9f9")
+        self.insp_ax.set_xlabel("Time (secs)", fontsize=7)
+        self.insp_ax.set_ylabel("Errors", fontsize=7)
         self.insp_errors_data = []
         self.insp_corrections_data = []
         self.insp_times = []
