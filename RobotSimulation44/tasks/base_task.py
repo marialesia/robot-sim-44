@@ -1,7 +1,8 @@
 ﻿# tasks/base_task.py
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout, QApplication
 from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
-from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, QTimer, QElapsedTimer, pyqtProperty
+from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, QTimer, pyqtProperty
+
 
 # --- Conveyor ---------------------------------------------------------------
 
@@ -350,6 +351,11 @@ class StorageContainerWidget(QWidget):
 
 
 # --- Scene container ---------------------------------------------------------
+
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout
+from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
+from PyQt5.QtCore import Qt, QPointF, QRectF
+
 class BaseTask(QWidget):
     """
     One task’s scene with three widgets (conveyor, arm, container).
@@ -440,11 +446,6 @@ class BaseTask(QWidget):
         self.grid.setRowStretch(0, 0)
         self.grid.setRowStretch(1, 1)
 
-        self._frame_count = 0
-        self._fps = 0
-        self._elapsed = QElapsedTimer()
-        self._elapsed.start()
-
     # --------- Per-task placement API  ----------
     def set_positions(
         self,
@@ -487,15 +488,3 @@ class BaseTask(QWidget):
             l, t, r, b = margins
             self.grid.setContentsMargins(int(l), int(t), int(r), int(b))
 
-
-    # --------- FPS Tracking ----------
-    def register_frame(self):
-        """Call this each time the task paints a frame"""
-        self._frame_count += 1
-        if self._elapsed.elapsed() >= 1000:  # 1 second
-            self._fps = self._frame_count
-            self._frame_count = 0
-            self._elapsed.restart()
-
-    def get_fps(self):
-        return self._fps

@@ -5,7 +5,6 @@ from .task_manager import TaskManager
 from main_interface.observer_control import ObserverControl
 from main_interface.layout_controller import LayoutController
 from main_interface.metrics_manager import MetricsManager
-from main_interface.fps_overlay import FPSOverlay
 import os, subprocess, sys
 
 
@@ -46,10 +45,6 @@ class UserSystemWindow(QMainWindow):
         # --- let TaskManager update panels when network 'start' or 'update_active' comes in
         if hasattr(self.task_manager, "set_workspace_updater"):
             self.task_manager.set_workspace_updater(self.layout_controller.update_workspace)
-        
-        # Add FPS overlay
-        self.fps_overlay = FPSOverlay(self.task_manager, self)
-        self.layout().addWidget(self.fps_overlay, 0, Qt.AlignTop | Qt.AlignRight)
 
 
 class ObserverSystemWindow(QMainWindow):
