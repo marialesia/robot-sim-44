@@ -36,7 +36,7 @@ class ConveyorBeltWidget(QWidget):
         self._box_colors = []       # empty list for various colours of boxes
         self._box_inset = 12        # keep boxes inside belt edges
         self._box_size = 24         # square box size in px
-        self._box_color = QColor(200, 40, 40)
+        # self._box_color = QColor(200, 40, 40)
 
     # Public API --------------------------------------------------------------
     def enable_motion(self, enable: bool):
@@ -351,11 +351,6 @@ class StorageContainerWidget(QWidget):
 
 
 # --- Scene container ---------------------------------------------------------
-
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFrame, QGridLayout
-from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
-from PyQt5.QtCore import Qt, QPointF, QRectF
-
 class BaseTask(QWidget):
     """
     One task’s scene with three widgets (conveyor, arm, container).
