@@ -165,6 +165,10 @@ class InspectionTask(BaseTask):
         self._present_slot_override = None
         self._pending_color = None
 
+        # ===== reset metrics when new task is started =====
+        if hasattr(self, "metrics_manager"):
+            self.metrics_manager.reset_metrics()
+
         if not self._pick_timer.isActive():
             sh, el = self._pose_home()
             self._set_arm(sh, el)
@@ -230,6 +234,10 @@ class InspectionTask(BaseTask):
             self.worker.stop()
             self.worker = None
 
+        # Reset correction counters
+        self._total_corrections = 0
+        self._correct_corrections = 0
+
     def stop(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
@@ -270,6 +278,10 @@ class InspectionTask(BaseTask):
 
         if hasattr(self, "metrics_manager"):
             self.metrics_manager.reset_metrics()
+
+        # Reset correction counters
+        self._total_corrections = 0
+        self._correct_corrections = 0
 
     # ---------- Arm path ----------
     def _pose_home(self):

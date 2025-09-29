@@ -259,6 +259,10 @@ class SortingTask(BaseTask):
         self._present_slot_override = None
         self._pending_color = None
 
+        # ===== reset metrics when new task is started =====
+        if hasattr(self, "metrics_manager"):
+            self.metrics_manager.reset_metrics()
+
         # playing conveyor sound
         self.play_sound("conveyor")
 
@@ -335,6 +339,10 @@ class SortingTask(BaseTask):
             self.worker.stop()
             self.worker = None   # fully drop it so we must re-create on start
 
+        # Reset correction counters
+        self._total_corrections = 0
+        self._correct_corrections = 0
+
     def stop(self):
         # ===== stop motions =====
         self.conveyor.enable_motion(False)
@@ -384,6 +392,9 @@ class SortingTask(BaseTask):
         # ===== reset metrics =====
         if hasattr(self, "metrics_manager"):
             self.metrics_manager.reset_metrics()
+        # Reset correction counters
+        self._total_corrections = 0
+        self._correct_corrections = 0
 
 
     # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> present -> return) ----------
