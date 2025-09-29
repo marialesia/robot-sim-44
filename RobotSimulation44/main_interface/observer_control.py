@@ -1,3 +1,4 @@
+# main_interface/observer_control
 from PyQt5.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QCheckBox, QPushButton,
     QComboBox, QLabel, QGroupBox, QFileDialog, QLineEdit, QSlider
@@ -150,6 +151,11 @@ class ObserverControl(QObject):
         self.pack_pace_dropdown.addItems(["slow", "medium", "fast"])
         packaging_layout.addWidget(self.pack_pace_dropdown)
 
+        packaging_layout.addWidget(QLabel("Bins:"))
+        self.pack_bin_dropdown = QComboBox()
+        self.pack_bin_dropdown.addItems(["2", "4", "6"])
+        packaging_layout.addWidget(self.pack_bin_dropdown)
+
         packaging_layout.addWidget(QLabel("Limit:"))
         self.pack_limit_dropdown = QComboBox()
         self.pack_limit_dropdown.addItems(["6", "5 - 6", "4 - 6"])
@@ -261,6 +267,9 @@ class ObserverControl(QObject):
     def get_pack_limit(self):
         return self.pack_limit_dropdown.currentText()
 
+    def get_pack_bin_count(self):
+        return int(self.pack_bin_dropdown.currentText())
+
     def get_pack_error_rate(self):
         return self.pack_error_slider.value() / 100.0
 
@@ -295,6 +304,7 @@ class ObserverControl(QObject):
                 "pace": self.get_pack_pace(),
                 "error_rate": self.get_pack_error_rate(),
                 "limit": self.get_pack_limit(),
+                "bin_count": self.get_pack_bin_count(),  # ADDED
             }
         elif task_name == "inspection":
             return {
@@ -371,6 +381,8 @@ class ObserverControl(QObject):
             "packaging": {
                 "enabled": self.packaging_checkbox.isChecked(),
                 "pace": self.pack_pace_dropdown.currentText(),
+                "limit": self.pack_limit_dropdown.currentText(),
+                "bin_count": self.pack_bin_dropdown.currentText(),
                 "error_rate": self.pack_error_slider.value(),
             },
             "inspection": {
@@ -407,6 +419,8 @@ class ObserverControl(QObject):
             p = params["packaging"]
             self.packaging_checkbox.setChecked(p.get("enabled", False))
             self.pack_pace_dropdown.setCurrentText(p.get("pace", "medium"))
+            self.pack_limit_dropdown.setCurrentText(p.get("limit", "6"))
+            self.pack_bin_dropdown.setCurrentText(p.get("bin_count", "6")) 
             self.pack_error_slider.setValue(p.get("error_rate", 0))
         if "inspection" in params:
             i = params["inspection"]

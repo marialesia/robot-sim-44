@@ -1,4 +1,3 @@
-# tasks/packaging_logic.py
 import time, random
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -6,23 +5,32 @@ from PyQt5.QtCore import QThread, pyqtSignal
 class PackagingWorker(QThread):
     """
     Background brain for the Packaging task.
+    UI schedules batches for the active container color; worker supplies pace & error rate.
 
-    New behavior:
-    - Spawns boxes matching the active container color most of the time.
-    - With probability error_rate, spawns the wrong color (one of the other two).
-    - Fade suggestion is still driven by reaching capacity, but the UI may defer
-      fading if an error is present; the UI can call rearm_fade() to allow a later fade.
+    NOTE: We keep bin_count and the active color palette for telemetry and any future logic
+    that may need it; the UI now controls exact colors via its active palette.
     """
-    box_spawned = pyqtSignal(dict)      # {"color": <"red"|"blue"|"green">}
+    box_spawned = pyqtSignal(dict)      # {"color": <"red"|"blue"|"green"|"purple"|"orange"|"teal">}
     metrics_ready = pyqtSignal(dict)    # end-of-run summary
     metrics_live = pyqtSignal(dict)     # live metrics
     container_should_fade = pyqtSignal(str, int, int, float)  # mode, count, capacity, secs
 
-    def __init__(self, pace="slow", error_rate=0.0):
+    def __init__(self, pace="slow", error_rate=0.0, bin_count=4):
         super().__init__()
         self.pace = pace or "slow"
         self.error_rate = float(error_rate or 0.0)
+        self.bin_count = int(bin_count) if bin_count is not None else 4
         self.running = True
+
+        # Active palette based on bin_count (kept in sync with PackagingTask)
+        if self.bin_count >= 6:
+            self.colors = ["red", "blue", "green", "purple", "orange", "teal"]
+        elif self.bin_count == 4:
+            self.colors = ["blue", "green", "purple", "orange"]
+        elif self.bin_count == 2:
+            self.colors = ["green", "purple"]
+        else:
+            self.colors = ["red", "blue", "green"][:max(1, self.bin_count)]
 
         self.pace_map = {
             "slow":   (0.1, 0.3),
@@ -43,24 +51,14 @@ class PackagingWorker(QThread):
         self._fired = False
 
         # color policy
-        self._cur_color = "red"
-        self._palette = ("red", "blue", "green")
+        # The UI tells us which color is active via begin_container(color=...)
+        self._cur_color = "green"
 
     def run(self):
         lo, hi = self.pace_map.get(self.pace, (0.3, 0.7))
         while self.running:
-            # choose color: usually the active color; sometimes wrong
-            if random.random() < self.error_rate:
-                others = [c for c in self._palette if c != self._cur_color]
-                color = random.choice(others)
-                is_error = True
-            else:
-                color = self._cur_color
-                is_error = False
-
-            self.box_spawned.emit({"color": color})
-
-            # pacing
+            # The UI drip spawns; we only exist for pacing metrics and signals.
+            # Emit a heartbeat with pace—this keeps telemetry flowing even if unused.
             rate = max(1e-6, random.uniform(lo, hi))  # items/sec
             time.sleep(1.0 / rate)
 
@@ -106,9 +104,7 @@ class PackagingWorker(QThread):
         else:
             self.correct += 1
 
-        # We don't know the box color here; let the UI decide correctness.
-        # Keep live throughput style metrics only.
-        elapsed = max(time.time() - self.start_time, 1.0)
+        # live metrics (basic set; UI augments with correction metrics)
         self.metrics_live.emit({
             "pack_total": self.total,
             "pack_errors": self.errors,
@@ -119,7 +115,6 @@ class PackagingWorker(QThread):
         if not self._fired and self._cur_capacity > 0 and self._cur_count >= self._cur_capacity:
             self._fired = True
             secs = max(0.0, time.time() - (self._cur_start_ts or time.time()))
-            # "mode" kept for compatibility (unused by UI logic now)
             self.container_should_fade.emit("normal", self._cur_count, self._cur_capacity, secs)
 
     def rearm_fade(self):
