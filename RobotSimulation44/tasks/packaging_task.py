@@ -188,8 +188,9 @@ class PackagingTask(BaseTask):
         self._pick_state = "idle"
         self._pick_t = 0
         self._pick_duration = 0
-        self._pick_from = (self.arm.shoulder_angle, self.arm.elbow_angle)
-        self._pick_to = (self.arm.shoulder_angle, self.arm.elbow_angle)
+        thetas = (self.arm.shoulder_angle, self.arm.elbow_angle)
+        self._pick_from = thetas
+        self._pick_to = thetas
         self._now_ms = 0
         self._last_touch_time_ms = -10000
         self._touch_window_px = 18
@@ -202,7 +203,12 @@ class PackagingTask(BaseTask):
         self._selected_active = False
         self._selected_expected = None
         self._selected_source = None  # the bin we "picked" from
+
+        # Held box metadata
         self._held_intended_color = None
+
+        # === NEW: per-box intended-color ring, aligned with conveyor _boxes ===
+        self._intended_colors = []  # list[str]; same length/order as self.conveyor._boxes/_box_colors
 
         # metrics for corrections
         self._total_corrections = 0
@@ -389,8 +395,8 @@ class PackagingTask(BaseTask):
             pass
 
     def _drip_spawn_tick(self):
-        """Spawn boxes for the currently active batch color; with probability=error_rate,
-        spawn a different (but still *visible*) color. Arm places by box color."""
+        """Spawn boxes for the current batch color; with probability=error_rate,
+        spawn a different (visible) color. Also snapshot intended_color per box."""
         if not self._batch_active or not self._batch_color:
             self._ensure_batch()
             return
@@ -406,18 +412,24 @@ class PackagingTask(BaseTask):
             QTimer.singleShot(self._batch_gap_ms, self._ensure_batch)
             return
 
-        # Default: correct color for this batch
-        spawn_color = self._batch_color
+        # Intended color for this spawned box
+        intended_color = self._batch_color
 
-        # With probability error_rate, spawn a different color (any other visible bin's color)
+        # Default: actual == intended
+        spawn_color = intended_color
+
+        # With probability error_rate, choose a different visible color (not intended)
         if self.worker and random.random() < float(self.worker.error_rate or 0.0):
             visible = [r["color"] for r in self._containers if r["widget"].isVisible()]
-            wrong_choices = [c for c in visible if c != self._batch_color]
+            wrong_choices = [c for c in visible if c != intended_color]
             if wrong_choices:
                 spawn_color = random.choice(wrong_choices)
 
-        # Put the box on the belt
+        # Put the box on the belt (actual_color)
         self.conveyor.spawn_box(color=spawn_color)
+
+        # === NEW: append intended_color aligned with the newly spawned box ===
+        self._intended_colors.append(intended_color)
 
         # Informational decrement; actual "need" recalculated each tick
         self._batch_remaining = max(0, self._batch_remaining - 1)
@@ -459,7 +471,7 @@ class PackagingTask(BaseTask):
         # With direct-to-color placement, we manage fades per-container locally.
         self._ensure_batch()
 
-    # ---------- Animate + pack (DIRECT-TO-COLOR) ----------
+    # ---------- Animate + pack ----------
     def _animate_flying_box(self, color, target_widget):
         if not target_widget:
             return
@@ -483,7 +495,26 @@ class PackagingTask(BaseTask):
         anim.finished.connect(box.deleteLater)
         anim.start()
 
+    # === NEW: helpers to find box index in grip window, and keep lists in sync ===
+    def _index_of_box_in_window(self):
+        boxes = getattr(self.conveyor, "_boxes", None)
+        if not boxes:
+            return -1
+        gx = self._grip_x()
+        w = self._touch_window_px
+        for i, x in enumerate(boxes):
+            if (gx - w) <= x <= (gx + w):
+                return i
+        return -1
+
+    def _actual_color_at_index(self, idx):
+        cols = getattr(self.conveyor, "_box_colors", None)
+        if not isinstance(cols, list) or idx < 0 or idx >= len(cols):
+            return None
+        return cols[idx]
+
     def _on_item_packed(self):
+        """Place by intended color (snapshotted at spawn). Error if actual != intended."""
         if not self._containers:
             return
 
@@ -492,29 +523,25 @@ class PackagingTask(BaseTask):
         except Exception:
             pass
 
+        # Held visuals (actual color)
         raw_packed = getattr(self.arm, "held_box_color", None)
-        packed_color = self._normalize_box_color(raw_packed)
-        if packed_color is None:
-            # nothing to place
-            self._held_intended_color = None
+        actual_color = self._normalize_box_color(raw_packed)
+
+        # Intended must be snapshotted earlier (at pick)
+        intended_color = self._held_intended_color
+
+        # No intended? Do nothing (strict to spec — never fallback to actual/current batch)
+        if intended_color is None:
             return
 
-        # Use the intended color snapshotted at pick time.
-        # Fallbacks: current batch color -> actual color (should rarely happen).
-        intended_color = self._held_intended_color or self._batch_color or packed_color
-
-        # Find the destination bin by intended color
+        # Find destination bin by intended color; it must be visible and not fading
         target_idx, target_rec = None, None
         for i, rec in enumerate(self._containers):
-            if rec["widget"].isVisible() and rec.get("color") == intended_color:
+            if rec["widget"].isVisible() and rec.get("color") == intended_color and not rec.get("fading"):
                 target_idx, target_rec = i, rec
                 break
-        if target_rec is None:
-            # As a last resort, drop by actual color to avoid losing boxes
-            for i, rec in enumerate(self._containers):
-                if rec["widget"].isVisible() and rec.get("color") == packed_color:
-                    target_idx, target_rec = i, rec
-                    break
+
+        # If intended bin isn't available (hidden or fading), skip placement entirely
         if target_rec is None:
             self._held_intended_color = None
             return
@@ -523,25 +550,25 @@ class PackagingTask(BaseTask):
         target_rec["count"] += 1
         self._update_label(target_rec)
 
-        # Animate
+        # Animate to intended bin
         target_widget = target_rec["widget"]
         if getattr(self.arm, "held_box_color", None):
             self._animate_flying_box(self.arm.held_box_color, target_widget)
 
-        # Determine error: actual != intended
-        is_error = (packed_color != intended_color)
+        # ERROR CONDITION: actual != intended
+        is_error = (actual_color != intended_color)
         try:
             get_logger().log_robot(
                 "Packaging",
                 f"pack {target_rec['count']}/{target_rec['capacity']} "
-                f"box_actual={packed_color} -> bin_intended={intended_color} {'ERROR' if is_error else 'OK'}"
+                f"box_actual={actual_color} -> bin_intended={intended_color} {'ERROR' if is_error else 'OK'}"
             )
         except Exception:
             pass
 
         if is_error:
             q = target_rec.setdefault("mis_queue", [])
-            q.append(packed_color)             # store wrong actual color that landed here
+            q.append(actual_color)           # record wrong actual color that landed here
             target_rec["mis_color"] = q[0]
             target_rec["mis_count"] = len(q)
             target_rec["error"] = True
@@ -575,7 +602,6 @@ class PackagingTask(BaseTask):
 
         # Re-evaluate batches
         self._ensure_batch()
-
 
     # ---------- Requeue SAME color after fade ----------
     def _requeue_same_color(self, rec, was_front=False):
@@ -964,13 +990,21 @@ class PackagingTask(BaseTask):
                     self.play_sound("robotic_arm")
                 except Exception:
                     pass
-                c = self._color_of_box_in_window()
-                if c is not None:
-                    self.arm.held_box_color = c
-                    self.arm.held_box_visible = True
-                    self.arm.update()
-                    # snapshot intended color at pick time
-                    self._held_intended_color = self._batch_color
+
+                # === SNAPSHOT actual + intended at pick ===
+                idx = self._index_of_box_in_window()
+                if idx != -1:
+                    actual_c = self._actual_color_at_index(idx)
+                    intended_c = None
+                    if 0 <= idx < len(self._intended_colors):
+                        intended_c = self._intended_colors[idx]
+                    if actual_c is not None:
+                        self.arm.held_box_color = actual_c
+                        self.arm.held_box_visible = True
+                        self.arm.update()
+                    # store intended for later placement (never fallback)
+                    self._held_intended_color = intended_c
+
                 self._pick_state = "hold"
                 self._start_seg(self._pose_pick(), 40)
 
@@ -1023,6 +1057,9 @@ class PackagingTask(BaseTask):
             del boxes[hit_index]
             if isinstance(colors, list) and hit_index < len(colors):
                 del colors[hit_index]
+            # === keep intended list in sync ===
+            if 0 <= hit_index < len(self._intended_colors):
+                del self._intended_colors[hit_index]
             self.conveyor.update()
 
     def _color_of_box_in_window(self):
@@ -1118,6 +1155,9 @@ class PackagingTask(BaseTask):
         self._selected_expected = None
         self._selected_source = None
 
+        # Clear any stale intended-colors memory
+        self._intended_colors.clear()
+
         # Start the first batch (random color that needs boxes)
         self._ensure_batch()
 
@@ -1163,6 +1203,9 @@ class PackagingTask(BaseTask):
             self.conveyor._boxes.clear()
         if hasattr(self, "conveyor") and hasattr(self.conveyor, "_box_colors"):
             self.conveyor._box_colors.clear()
+        # clear intended list as well
+        self._intended_colors.clear()
+
         self.conveyor.update()
 
         try:
@@ -1206,6 +1249,9 @@ class PackagingTask(BaseTask):
             self.conveyor._boxes.clear()
         if hasattr(self, "conveyor") and hasattr(self.conveyor, "_box_colors"):
             self.conveyor._box_colors.clear()
+        # clear intended list as well
+        self._intended_colors.clear()
+
         self.conveyor.update()
 
         try:
