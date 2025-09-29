@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Custom ignores for RobotSimulation44
+RobotSimulation44/dist.zip
+RobotSimulation44.zip
