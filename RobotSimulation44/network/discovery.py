@@ -1,3 +1,4 @@
+# network/discovery.py
 import socket, threading, json, time
 
 BROADCAST_PORT = 5001

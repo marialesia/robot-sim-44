@@ -1,3 +1,4 @@
+# tasks/packaging_logic.py
 import time, random
 from PyQt5.QtCore import QThread, pyqtSignal
 

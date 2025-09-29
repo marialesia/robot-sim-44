@@ -36,10 +36,10 @@ class ObserverControl(QObject):
         self.start_button = QPushButton("Start")
         self.complete_button = QPushButton("Complete")
         self.stop_button = QPushButton("Stop")
-        # --- New Save / Load buttons ---
+        # --- Save / Load buttons ---
         self.save_button = QPushButton("Save Params")
         self.load_button = QPushButton("Load Params")
-        # --- New user input for time limit ---
+        # --- user input for time limit ---
         self.time_limit_input = QLineEdit()
         self.time_limit_input.setPlaceholderText("Time Limit")
         self.time_limit_input.setFixedWidth(70)
@@ -304,7 +304,7 @@ class ObserverControl(QObject):
                 "pace": self.get_pack_pace(),
                 "error_rate": self.get_pack_error_rate(),
                 "limit": self.get_pack_limit(),
-                "bin_count": self.get_pack_bin_count(),  # ADDED
+                "bin_count": self.get_pack_bin_count(), 
             }
         elif task_name == "inspection":
             return {

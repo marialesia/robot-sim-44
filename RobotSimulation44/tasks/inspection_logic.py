@@ -90,7 +90,7 @@ class InspectionWorker(QThread):
         if is_error:
             self.errors += 1
 
-            # New: count only red boxes put in green as defects missed
+            # count only red boxes put in green as defects missed
             if box_color == "red":
                 self.defects_missed = getattr(self, "defects_missed", 0) + 1
 

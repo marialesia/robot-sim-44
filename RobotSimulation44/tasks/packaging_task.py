@@ -207,7 +207,7 @@ class PackagingTask(BaseTask):
         # Held box metadata
         self._held_intended_color = None
 
-        # === NEW: per-box intended-color ring, aligned with conveyor _boxes ===
+        # === per-box intended-color ring, aligned with conveyor _boxes ===
         self._intended_colors = []  # list[str]; same length/order as self.conveyor._boxes/_box_colors
 
         # metrics for corrections
@@ -428,7 +428,7 @@ class PackagingTask(BaseTask):
         # Put the box on the belt (actual_color)
         self.conveyor.spawn_box(color=spawn_color)
 
-        # === NEW: append intended_color aligned with the newly spawned box ===
+        # === append intended_color aligned with the newly spawned box ===
         self._intended_colors.append(intended_color)
 
         # Informational decrement; actual "need" recalculated each tick
@@ -495,7 +495,7 @@ class PackagingTask(BaseTask):
         anim.finished.connect(box.deleteLater)
         anim.start()
 
-    # === NEW: helpers to find box index in grip window, and keep lists in sync ===
+    # === helpers to find box index in grip window, and keep lists in sync ===
     def _index_of_box_in_window(self):
         boxes = getattr(self.conveyor, "_boxes", None)
         if not boxes:

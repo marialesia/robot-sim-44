@@ -1,4 +1,4 @@
-# audio_manager
+# audio_manager.py
 import sys, os
 from PyQt5.QtMultimedia import QSoundEffect
 from PyQt5.QtCore import QUrl, QTimer
