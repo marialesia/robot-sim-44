@@ -944,7 +944,18 @@ class PackagingTask(BaseTask):
     def _pose_prep(self):    return (-92.0, -12.0)
     def _pose_pick(self):    return (-110.0, -95.0)
     def _pose_lift(self):    return (-93.0, -10.0)
-    def _pose_present(self): return (40.0,  10.0)
+
+    def _pose_present(self, slot):
+        poses = {
+            "red":    (-200.0, -8.0),   # far left
+            "blue":   (-220.0, -10.0),  # left-mid
+            "green":  (-240.0, -12.0),  # slightly left of center
+            "purple": (60.0,  12.0),    # slightly right of center
+            "orange": (40.0,  10.0),    # right-mid
+            "teal":   (20.0,  8.0),     # far right
+        }
+        return poses.get(slot, self._pose_lift())
+
 
     # ---------- FSM plumbing ----------
     def _set_arm(self, shoulder, elbow):
@@ -1013,8 +1024,10 @@ class PackagingTask(BaseTask):
                 self._start_seg(self._pose_lift(), 120)
 
             elif self._pick_state == "lift":
+                # Aim toward the intended bin’s direction (slot == intended color)
+                slot = self._held_intended_color or self._batch_color
                 self._pick_state = "present"
-                self._start_seg(self._pose_present(), 200)
+                self._start_seg(self._pose_present(slot), 200)
 
             elif self._pick_state == "present":
                 self._on_item_packed()
