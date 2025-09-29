@@ -270,7 +270,7 @@ class PackagingTask(BaseTask):
                     "green": QColor("#1f7a3a"),
                     "purple": QColor("#6a1b9a"),
                     "orange": QColor("#c15800"),
-                    "teal": QColor("#00796b"),
+                    "teal": QColor("#b8efe6"),
                 }
                 flash_color = color_map.get(mis, QColor("#e74c3c"))
                 w.border = flash_color if self._flash_on else rec.get("orig_border", w.border)
@@ -762,12 +762,12 @@ class PackagingTask(BaseTask):
            2) Click destination bin of that colour to move one unit
         """
         def _ghost_qcolor(name: str) -> QColor:
-            return (QColor("#e74c3c") if name == "red"
-                    else QColor("#3498db") if name == "blue"
-                    else QColor("#27ae60") if name == "green"
+            return (QColor("#c82828") if name == "red"
+                    else QColor("#2b4a91") if name == "blue"
+                    else QColor("#1f7a3a") if name == "green"
                     else QColor("#6a1b9a") if name == "purple"
                     else QColor("#c15800") if name == "orange"
-                    else QColor("#00796b"))
+                    else QColor("#b8efe6")) # teal
 
         # Start a selection if none active
         if not self._selected_active:
