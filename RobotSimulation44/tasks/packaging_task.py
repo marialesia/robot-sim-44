@@ -744,15 +744,19 @@ class PackagingTask(BaseTask):
             for rec in self._containers:
                 if obj is rec["widget"]:
                     if rec.get("fading") and rec.get("error"):
+                        # 1-click: cancel fade AND immediately start the pick/ghost
                         self._cancel_fade(rec)
                         try:
                             get_logger().log_user("Packaging", "container", "click", "cancel_fade_on_error")
                         except Exception:
                             pass
+                        self._smart_fix_pick_or_place(rec)
                         return True
+
                     # Otherwise, proceed with click-to-fix
                     self._smart_fix_pick_or_place(rec)
                     return True
+
         return super().eventFilter(obj, event)
 
     # ---------- Smart-fix (two-click: pick then place) ----------
