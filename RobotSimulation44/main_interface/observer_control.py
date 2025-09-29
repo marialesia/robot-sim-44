@@ -425,7 +425,7 @@ class ObserverControl(QObject):
     def format_time_input(self):
         text = self.time_limit_input.text().strip()
         if not text:
-            self.time_limit_input.setText("00:00")
+            self.time_limit_input.clear()
             return
         try:
             if ":" in text:

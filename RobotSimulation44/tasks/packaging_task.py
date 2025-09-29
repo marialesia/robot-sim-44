@@ -810,6 +810,10 @@ class PackagingTask(BaseTask):
                 rec["badge"].hide()
             self._update_label(rec)
 
+        # ===== reset metrics when new task is started =====
+        if hasattr(self, "metrics_manager"):
+            self.metrics_manager.reset_metrics()
+
         # tell worker the active container's capacity and color
         if self._containers:
             leftmost = self._containers[0]
@@ -902,6 +906,10 @@ class PackagingTask(BaseTask):
         self.arm.held_box_visible = False
         self.arm.update()
 
+        # Reset correction counters
+        self._total_corrections = 0
+        self._correct_corrections = 0
+
     def stop(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
@@ -953,6 +961,10 @@ class PackagingTask(BaseTask):
         # ===== reset metrics =====
         if hasattr(self, "metrics_manager"):
             self.metrics_manager.reset_metrics()
+
+        # Reset correction counters
+        self._total_corrections = 0
+        self._correct_corrections = 0
 
     def _on_metrics(self, metrics):
         try:
