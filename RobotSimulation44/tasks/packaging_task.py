@@ -1222,6 +1222,11 @@ class PackagingTask(BaseTask):
 
         self.conveyor.update()
 
+        # Reset box counts to 0 on the labels
+        for rec in self._containers:
+            rec["count"] = 0
+            self._update_label(rec)
+
         try:
             self.audio.stop_conveyor()
             self.audio.stop_alarm()
@@ -1271,6 +1276,11 @@ class PackagingTask(BaseTask):
         self._intended_colors.clear()
 
         self.conveyor.update()
+
+        # Reset box counts to 0 on the labels
+        for rec in self._containers:
+            rec["count"] = 0
+            self._update_label(rec)
 
         try:
             self.audio.stop_conveyor()
