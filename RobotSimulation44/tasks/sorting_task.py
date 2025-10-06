@@ -325,6 +325,8 @@ class SortingTask(BaseTask):
         self._total_corrections = 0
         self._correct_corrections = 0
 
+        self._end_drag_box() # remove the ghost box
+
     def stop(self):
         # Stop motions
         self.conveyor.enable_motion(False)
@@ -377,6 +379,7 @@ class SortingTask(BaseTask):
         self._total_corrections = 0
         self._correct_corrections = 0
 
+        self._end_drag_box() # remove the ghost box
 
     # Arm pick cycle (approach -> descend -> hold -> lift -> present -> return)
     def _pose_home(self):

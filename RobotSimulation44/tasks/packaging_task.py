@@ -1249,6 +1249,8 @@ class PackagingTask(BaseTask):
         self._total_corrections = 0
         self._correct_corrections = 0
 
+        self._end_drag_box() # remove the ghost box
+
         # reset counts/caps for visible containers
         for rec in self._containers:
             rec["widget"].border = rec.get("orig_border", rec["widget"].border)
@@ -1318,6 +1320,8 @@ class PackagingTask(BaseTask):
         # Reset correction counters
         self._total_corrections = 0
         self._correct_corrections = 0
+
+        self._end_drag_box() # remove the ghost box
 
         # reset counts/caps for visible containers
         for rec in self._containers:
