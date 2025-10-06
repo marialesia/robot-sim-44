@@ -165,6 +165,9 @@ class InspectionTask(BaseTask):
         self.conveyor.setBeltSpeed(120)
         self.conveyor.enable_motion(True)
 
+        # Reset per-bin error lists
+        self._bin_errors = {k: [] for k in self._slot_to_widget.keys()}
+
         # reset trigger state so we can fire immediately after a Stop
         self._now_ms = 0
         self._last_touch_time_ms = -10000
