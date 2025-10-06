@@ -1140,6 +1140,10 @@ class PackagingTask(BaseTask):
                 rec["badge"].hide()
             self._update_label(rec)
 
+        # Reset metrics when new task is started
+        if hasattr(self, "metrics_manager"):
+            self.metrics_manager.reset_metrics()
+
         # Start / restart worker (pacing + metrics)
         if self.worker is None or not self.worker.isRunning():
             self.worker = PackagingWorker(pace=pace, error_rate=error_rate, bin_count=len(slot_order))
