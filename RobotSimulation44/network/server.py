@@ -6,6 +6,7 @@ import json
 class Server:
     def __init__(self, host="0.0.0.0", port=5000,
                  on_message=None, on_connect=None, on_disconnect=None):
+        # Initialize server with host/port and optional callbacks
         self.host = host
         self.port = port
         self.on_message = on_message
@@ -14,13 +15,15 @@ class Server:
         self.client_conn = None
         self.client_addr = None
         self.running = False
-        self._send_buffer = []  # queue for messages until client connects
+        self._send_buffer = []  # Queue for messages until client connects
 
     def start(self):
+        # Start server loop in a background thread
         thread = threading.Thread(target=self._run, daemon=True)
         thread.start()
 
     def _run(self):
+        # Main server loop
         self.running = True
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -33,7 +36,7 @@ class Server:
                     self.client_conn, self.client_addr = s.accept()
                     print(f"[Server] Client connected from {self.client_addr}")
 
-                    # Fire connect hook
+                    # Fire connect callback if provided
                     if self.on_connect:
                         try:
                             self.on_connect(self.client_addr)
@@ -45,6 +48,7 @@ class Server:
                         self._send_raw(msg)
                     self._send_buffer.clear()
 
+                    # Communication loop with connected client
                     with self.client_conn:
                         while self.running:
                             try:
@@ -61,10 +65,12 @@ class Server:
                                 break
 
                 finally:
+                    # Clean up client connection on disconnect
                     if self.client_conn:
                         self.client_conn.close()
                         self.client_conn = None
 
+                    # Try disconnect callback if provided
                     if self.on_disconnect:
                         try:
                             self.on_disconnect()
@@ -72,6 +78,7 @@ class Server:
                             print("[Server] on_disconnect callback failed:", e)
 
     def _send_raw(self, msg):
+        # Send JSON message to connected client directly
         if self.client_conn:
             try:
                 self.client_conn.sendall(json.dumps(msg).encode("utf-8"))
@@ -80,6 +87,7 @@ class Server:
                 self.client_conn = None  # mark as closed
 
     def send(self, msg):
+        # Public send method; queues if no client connected
         if self.client_conn:
             self._send_raw(msg)
         else:

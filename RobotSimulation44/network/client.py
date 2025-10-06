@@ -6,19 +6,22 @@ import time
 
 class Client:
     def __init__(self, host="127.0.0.1", port=5000, on_message=None, reconnect_interval=2):
+        # Client configuration
         self.host = host
         self.port = port
         self.on_message = on_message
         self.conn = None
         self.running = False
-        self._send_buffer = []  # queue until connected
+        self._send_buffer = []  # Queue messages until connection is established
         self.reconnect_interval = reconnect_interval
 
     def start(self):
+        # Start the client thread to handle connection and incoming messages
         thread = threading.Thread(target=self._run, daemon=True)
         thread.start()
 
     def _run(self):
+        # Main loop: connect to server, handle incoming messages, and manage reconnections
         self.running = True
         while self.running:
             try:
@@ -33,6 +36,7 @@ class Client:
                         self._send_raw(msg)
                     self._send_buffer.clear()
 
+                    # Listen for incoming messages
                     while self.running:
                         data = s.recv(4096)
                         if not data:
@@ -50,6 +54,7 @@ class Client:
                 break  # socket closed
 
     def _send_raw(self, msg):
+        # Send a message immediately to the server (internal use)
         if self.conn:
             try:
                 self.conn.sendall(json.dumps(msg).encode("utf-8"))
@@ -57,8 +62,8 @@ class Client:
                 print("[Client] Send failed:", e)
 
     def send(self, msg):
+        # Send a message to the server; queue it if not connected yet
         if self.conn:
             self._send_raw(msg)
         else:
-            # Queue until connection established
             self._send_buffer.append(msg)

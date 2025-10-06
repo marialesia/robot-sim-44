@@ -6,11 +6,14 @@ from tasks.inspection_task import InspectionTask
 
 class TaskManager:
     def __init__(self):
+        # Dictionary to store instances of each task
         self.task_instances = {}
+        # External managers
         self.metrics_manager = None
         self.workspace_updater = None
         self.network_client = None
-        self.sounds_enabled = {    # always keep current sounds state
+        # Always keep current state of sounds
+        self.sounds_enabled = {
             "conveyor": True,
             "robotic_arm": True,
             "correct_chime": True,
@@ -18,6 +21,7 @@ class TaskManager:
             "alarm": True
         }
 
+    # Return task panels for all active tasks
     def get_task_panels(self, active_tasks):
         panels = []
         all_tasks = {
@@ -27,33 +31,40 @@ class TaskManager:
         }
 
         for name, cls in all_tasks.items():
+            # Instantiate task if not already created
             if name not in self.task_instances:
                 self.task_instances[name] = cls()
                 if self.metrics_manager:
                     self.task_instances[name].metrics_manager = self.metrics_manager
                 if self.network_client:
                     self.task_instances[name].network_client = self.network_client
-                # inject sounds_enabled reference
+                # Inject sounds_enabled reference
                 self.task_instances[name].sounds_enabled = self.sounds_enabled
 
+            # Enable task if it is in the active list
             self.task_instances[name].enabled = name in active_tasks
 
+            # Add panel to list if task is active
             if name in active_tasks:
                 panels.append(self.task_instances[name])
 
         return panels
 
+    # Setter for metrics manager
     def set_metrics_manager(self, metrics_manager):
         self.metrics_manager = metrics_manager
 
+    # Setter for workspace updater function
     def set_workspace_updater(self, updater):
         self.workspace_updater = updater
 
+    # Setter for network client reference
     def set_network_client(self, client):
         self.network_client = client
         for t in self.task_instances.values():
             t.network_client = client
 
+    # Start all active tasks with given parameters
     def start_all_tasks(self, msg):
         params = msg.get("params", {})
         active = params.get("active", [])
@@ -61,20 +72,20 @@ class TaskManager:
         # Update sounds if present
         if "sounds" in params:
             self.sounds_enabled.update(params["sounds"])
-            # --- Reinject latest sounds state into ALL tasks, not just new ones ---
+            # Reinject latest sounds state into all tasks, not just new ones
             for task in self.task_instances.values():
                 task.sounds_enabled = self.sounds_enabled
 
-        # Update workspace
+        # Update workspace display for active tasks
         if self.workspace_updater:
             self.workspace_updater(active)
 
-        # Start each active task
+        # Start each active task with its parameters
         for name in active:
             task = self.task_instances.get(name)
             if not task:
                 continue
-            # ensure sounds reference is current
+            # Ensure sounds reference is current
             task.sounds_enabled = self.sounds_enabled
             task_params = params.get(name, {})
             try:
@@ -82,11 +93,13 @@ class TaskManager:
             except TypeError:
                 task.start()
 
+    # Pause all tasks
     def pause_all_tasks(self):
         for task in self.task_instances.values():
             if hasattr(task, "pause"):
                 task.pause()
 
+    # Stop all tasks
     def stop_all_tasks(self):
         for task in self.task_instances.values():
             if hasattr(task, "stop"):

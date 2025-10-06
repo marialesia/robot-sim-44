@@ -7,15 +7,18 @@ DISCOVERY_MESSAGE = {"service": "warehouse-sim", "port": 5000}
 
 class DiscoveryBroadcaster:
     def __init__(self, interval=2):
+        # Initialize the broadcaster with a given interval in seconds
         self.interval = interval
         self.running = False
 
     def start(self):
+        # Start broadcasting discovery messages in a background thread
         thread = threading.Thread(target=self._run, daemon=True)
         self.running = True
         thread.start()
 
     def _run(self):
+        # Send discovery messages periodically over UDP broadcast
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             s.settimeout(0.2)
@@ -30,9 +33,11 @@ class DiscoveryBroadcaster:
                 time.sleep(self.interval)
 
     def stop(self):
+        # Stop broadcasting messages
         self.running = False
 
     def _get_local_ip(self):
+        # Determine the local IP address of this machine
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
@@ -45,15 +50,18 @@ class DiscoveryBroadcaster:
 
 class DiscoveryListener:
     def __init__(self, on_found):
+        # Initialize listener with a callback function `on_found(ip, port)`
         self.on_found = on_found
         self.running = False
 
     def start(self):
+        # Start listening for discovery messages in a background thread
         thread = threading.Thread(target=self._run, daemon=True)
         self.running = True
         thread.start()
 
     def _run(self):
+        # Listen for UDP broadcast messages and call `on_found` for valid services
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind(("", BROADCAST_PORT))
@@ -68,4 +76,5 @@ class DiscoveryListener:
                     pass
 
     def stop(self):
+        # Stop listening for discovery messages
         self.running = False

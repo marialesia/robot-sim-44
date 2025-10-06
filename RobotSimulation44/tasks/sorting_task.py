@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QWidget, QHBoxLayout, QSizePolicy, QLabel, QLabel
 from .base_task import BaseTask, StorageContainerWidget
 from .sorting_logic import SortingWorker
 from audio_manager import AudioManager
-import random  # for picking a wrong bin on purpose when worker flags an error
+import random
 from event_logger import get_logger 
 
 
@@ -13,17 +13,16 @@ class SortingTask(BaseTask):
     def __init__(self):
         super().__init__(task_name="Sorting")
 
-        # ---- Audio ----
+        # Audio
         self.audio = AudioManager()
 
-        # ---- Robot arm visuals ----
+        # Robot arm visuals
         self.arm.shoulder_angle = -90
         self.arm.elbow_angle = -0
         self.arm.c_arm = QColor("#3f88ff")
         self.arm.c_arm_dark = QColor("#2f6cc9")
 
-        # ---- Containers (all defined together) ----
-        # Blue - reusing the built-in container
+        # Containers
         self.container_blue = self.container
         self.container_blue.border = QColor("#2b4a91")
         self.container_blue.fill_top = QColor("#dbe8ff")
@@ -65,7 +64,7 @@ class SortingTask(BaseTask):
         self.container_teal.fill_bottom = QColor("#b8efe6")
         self.container_teal.rib = QColor(0, 121, 107, 120)
 
-        # ---- Layout: Conveyor (row 0), Arm (row 1), Containers (row 3) ----
+        # Layout: Conveyor (row 0), Arm (row 1), Containers (row 3)
         self.set_positions(
             conveyor=dict(row=0, col=0, colSpan=6, align=Qt.AlignTop),  # Change the position of the conveyor belt here
             arm=dict(row=0, col=0, colSpan=6, align=Qt.AlignHCenter | Qt.AlignBottom),  # Change the position of the arm here
@@ -74,21 +73,6 @@ class SortingTask(BaseTask):
             spacing=18
         )
 
-        '''
-        # Place all containers on the same row
-        # self.grid.addWidget(widget, row, column, rowSpan, columnSpan, alignment) 
-        self.grid.addWidget(self.container_red,    3, 0, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
-        self.grid.addWidget(self.container_blue,   3, 1, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
-        self.grid.addWidget(self.container_green,  3, 2, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
-        self.grid.addWidget(self.container_purple, 3, 3, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
-        self.grid.addWidget(self.container_orange, 3, 4, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
-        self.grid.addWidget(self.container_teal,   3, 5, 1, 1, Qt.AlignHCenter | Qt.AlignTop)
-
-        # Ensure new columns expand evenly
-        self.grid.setColumnStretch(3, 1)
-        self.grid.setColumnStretch(4, 1)
-        self.grid.setColumnStretch(5, 1)
-        '''
         # Group all containers into one tight horizontal row (centered)
         row = QWidget()
         row_layout = QHBoxLayout(row)
@@ -104,7 +88,7 @@ class SortingTask(BaseTask):
         # Add the row to the same grid area where your containers were (row 3), span all 6 columns
         self.grid.addWidget(row, 3, 0, 1, 6, Qt.AlignHCenter | Qt.AlignTop)
 
-        # --- Clickable containers: map slot -> widget and install event filters ---
+        # Clickable containers: map slot -> widget and install event filters
         self._slot_to_widget = {
             "red":    self.container_red,
             "blue":   self.container_blue,
@@ -117,14 +101,14 @@ class SortingTask(BaseTask):
             w._slot = slot  # tag widget for click handling
             w.installEventFilter(self)
 
-        # --- Drag ghost for error correction ---
+        # Drag ghost for error correction
         self._drag_label = None        # QLabel that follows mouse
         self._drag_color = None        # QColor of the carried box
         self._drag_timer = QTimer(self)
         self._drag_timer.setInterval(16)   # ~60fps
         self._drag_timer.timeout.connect(self._update_drag_ghost)
 
-        # --- Error move model ---
+        # Error move model
         self._errors = {}                                # id -> {id,color,actual,current}
         self._bin_errors = {k: [] for k in self._slot_to_widget.keys()}  # slot -> [ids]
         self._next_eid = 1
@@ -145,11 +129,11 @@ class SortingTask(BaseTask):
             "teal": QColor("#b8efe6"),
         }
 
-        # ---- Exclamation badges (one per bin) ----
+        # Exclamation badges (one per bin)
         self._badges = {}
         self._create_error_badges()
 
-        # ---- Flashing outline timer for bins with errors ----
+        # Flashing outline timer for bins with errors
         self._flash_on = False
         self._flash_timer = QTimer(self)
         self._flash_timer.setInterval(350)   # speed of flash
@@ -165,11 +149,11 @@ class SortingTask(BaseTask):
         self.container_orange.update()
         self.container_teal.update()
 
-        # ===== Existing box spawner (created but not started until Start) =====
+        # Existing box spawner (created but not started until Start)
         self._box_timer = QTimer(self)
         self._box_timer.timeout.connect(self.conveyor.spawn_box)
 
-        # ===== Arm "touch every box" animation (timer-driven) =====
+        # Arm "touch every box" animation (timer-driven)
         self._pick_timer = QTimer(self)
         self._pick_timer.setInterval(16)  # ~60 FPS
         self._pick_timer.timeout.connect(self._tick_pick)
@@ -181,20 +165,20 @@ class SortingTask(BaseTask):
         self._pick_from = (self.arm.shoulder_angle, self.arm.elbow_angle)
         self._pick_to = (self.arm.shoulder_angle, self.arm.elbow_angle)
 
-        # --- Trigger settings to touch every box ---
+        # Trigger settings to touch every box
         self._now_ms = 0
         self._last_touch_time_ms = -10000
         self._touch_window_px = 18
         self._touch_cooldown_ms = 120
 
-        # --- Despawn offset (independent of detection) ---
+        # Despawn offset (independent of detection)
         self._despawn_offset_px = 0  # +pixels to the RIGHT of detection; increase = disappears later
 
-        # --- remember which container direction to "present" toward after lift ---
+        # remember which container direction to "present" toward after lift
         self._target_slot = None  # one of: red/blue/green/purple/orange/teal
         self._present_slot_override = None  # when worker says incorrect, we aim here
 
-        # --- capture color at trigger-time to avoid races ---
+        # capture color at trigger-time to avoid races
         self._pending_color = None  # color captured exactly when the cycle starts
 
         # For Reaction time
@@ -203,17 +187,16 @@ class SortingTask(BaseTask):
         self._total_corrections = 0
         self._correct_corrections = 0
 
-        # --- initialize worker ---
+        # initialize worker
         self.worker = None
 
-
-    # ===== Called by the observer GUI =====
+    # Called by the observer GUI
     def start(self, pace=None, bin_count=None, error_rate=None):
-        # --- Guard: only run if this task is enabled ---
+        # Guard: only run if this task is enabled
         if not getattr(self, "enabled", True):
             return
 
-        # --- All bins in fixed order ---
+        # All bins in fixed order
         all_containers = {
             "red": self.container_red,
             "blue": self.container_blue,
@@ -246,7 +229,7 @@ class SortingTask(BaseTask):
         # Reset per-bin error lists
         self._bin_errors = {k: [] for k in self._slot_to_widget.keys()}
 
-        # belt motion
+        # Belt motion
         self.conveyor.setBeltSpeed(120)   # left -> right
         self.conveyor.enable_motion(True)
 
@@ -259,24 +242,24 @@ class SortingTask(BaseTask):
         self._present_slot_override = None
         self._pending_color = None
 
-        # ===== reset metrics when new task is started =====
+        # Reset metrics when new task is started
         if hasattr(self, "metrics_manager"):
             self.metrics_manager.reset_metrics()
 
-        # playing conveyor sound
+        # Playing conveyor sound
         self.play_sound("conveyor")
 
-        # start arm pick monitor
+        # Start arm pick monitor
         if not self._pick_timer.isActive():
             sh, el = self._pose_home()
             self._set_arm(sh, el)
             self._pick_timer.start()
 
-        # start flashing timer
+        # Start flashing timer
         if not self._flash_timer.isActive():
             self._flash_timer.start()
 
-        # ===== start the worker logic =====
+        # Start the worker logic
         if self.worker is None:
             self.worker = SortingWorker(
                 pace=pace,
@@ -294,9 +277,8 @@ class SortingTask(BaseTask):
 
 
     def complete(self):
-        # ===== stop motions =====
+        # Stop motions
         self.conveyor.enable_motion(False)
-
         if self._box_timer.isActive():
             self._box_timer.stop()
         if self._pick_timer.isActive():
@@ -304,49 +286,48 @@ class SortingTask(BaseTask):
         if self._flash_timer.isActive():
             self._flash_timer.stop()
 
-        #stop conveyor sound and alarm
+        #Stop conveyor sound and alarm
         self.audio.stop_conveyor()
         self.audio.stop_alarm()
 
-        # ===== clear all boxes from the conveyor =====
+        # Clear all boxes from the conveyor
         if hasattr(self.conveyor, "_boxes"):
             self.conveyor._boxes.clear()
         if hasattr(self.conveyor, "_box_colors"):
             self.conveyor._box_colors.clear()
         self.conveyor.update()
 
-        # reset borders and hide badges
+        # Reset borders and hide badges
         for slot, w in self._slot_to_widget.items():
             w.border = self._orig_borders.get(slot, w.border)
             w.update()
         for b in self._badges.values():
             b.hide()
 
-        # return arm to home
+        # Return arm to home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
         self.arm.held_box_visible = False
         self.arm.update()
 
-        # clear highlight if any selection
+        # Clear highlight if any selection
         if self._selected_error is not None:
             for slot in self._slot_to_widget.keys():
                 self._highlight_bin(slot, False)
             self._selected_error = None
 
-        # ===== stop worker logic =====
+        # Stop worker logic
         if self.worker and self.worker.isRunning():
             self.worker.stop()
-            self.worker = None   # fully drop it so we must re-create on start
+            self.worker = None
 
         # Reset correction counters
         self._total_corrections = 0
         self._correct_corrections = 0
 
     def stop(self):
-        # ===== stop motions =====
+        # Stop motions
         self.conveyor.enable_motion(False)
-
         if self._box_timer.isActive():
             self._box_timer.stop()
         if self._pick_timer.isActive():
@@ -354,42 +335,42 @@ class SortingTask(BaseTask):
         if self._flash_timer.isActive():
             self._flash_timer.stop()
 
-        #stop conveyor sound and alarm
+        # Stop conveyor sound and alarm
         self.audio.stop_conveyor()
         self.audio.stop_alarm()
 
-        # ===== clear all boxes from the conveyor =====
+        # Clear all boxes from the conveyor
         if hasattr(self.conveyor, "_boxes"):
             self.conveyor._boxes.clear()
         if hasattr(self.conveyor, "_box_colors"):
             self.conveyor._box_colors.clear()
         self.conveyor.update()
 
-        # reset borders and hide badges
+        # Reset borders and hide badges
         for slot, w in self._slot_to_widget.items():
             w.border = self._orig_borders.get(slot, w.border)
             w.update()
         for b in self._badges.values():
             b.hide()
 
-        # return arm to home
+        # Return arm to home
         sh, el = self._pose_home()
         self._set_arm(sh, el)
         self.arm.held_box_visible = False
         self.arm.update()
 
-        # clear highlight if any selection
+        # Clear highlight if any selection
         if self._selected_error is not None:
             for slot in self._slot_to_widget.keys():
                 self._highlight_bin(slot, False)
             self._selected_error = None
 
-        # ===== stop worker logic =====
+        # Stop worker logic
         if self.worker and self.worker.isRunning():
             self.worker.stop()
-            self.worker = None   # fully drop it so we must re-create on start
+            self.worker = None
 
-        # ===== reset metrics =====
+        # Reset metrics
         if hasattr(self, "metrics_manager"):
             self.metrics_manager.reset_metrics()
         # Reset correction counters
@@ -397,7 +378,7 @@ class SortingTask(BaseTask):
         self._correct_corrections = 0
 
 
-    # ---------- Arm pick cycle (approach -> descend -> hold -> lift -> present -> return) ----------
+    # Arm pick cycle (approach -> descend -> hold -> lift -> present -> return)
     def _pose_home(self):
         return (-90.0, -0.0)
 
@@ -473,7 +454,7 @@ class SortingTask(BaseTask):
                 self._start_seg(self._pose_pick(), 120)
 
             elif self._pick_state == "descend":
-                # --- Trigger sorting only when arm reaches box ---
+                # Trigger sorting only when arm reaches box
                 nearest_color = self._color_of_box_in_window()
                 self.play_sound("robotic_arm")
                 if nearest_color:
@@ -515,7 +496,7 @@ class SortingTask(BaseTask):
                     self._start_seg(self._pose_home(), 160)
 
             elif self._pick_state == "present":
-                # At the moment of drop -> animate flying box
+                # Animate flying box at the moment of drop
                 slot_to_use = self._present_slot_override or self._target_slot
                 if slot_to_use:
                     target_widget = self._slot_to_widget.get(slot_to_use)
@@ -538,13 +519,13 @@ class SortingTask(BaseTask):
             elif self._pick_state == "idle_pause":
                 self._pick_state = "idle"
 
-    # ---------- helpers ----------
+    # Helpers
     def _grip_x(self):
-        """Single source of truth for the gripper's detection X (edit here to shift detection)."""
+        # Single source of truth for the gripper's detection X (edit here to shift detection) 
         return self.conveyor.width() * 0.44 # Change this value to increate/decrease the position where the robot arm picks up a box
 
     def _box_near_grip(self):
-        """Detection-only: True if any box is within the window around the gripper."""
+        # Detection-only: True if any box is within the window around the gripper 
         boxes = getattr(self.conveyor, "_boxes", None)
         if not boxes:
             return False
@@ -556,31 +537,34 @@ class SortingTask(BaseTask):
         return False
 
     def _despawn_if_past_cutoff(self):
-        """Remove a box after it passes the later cutoff (independent of detection)."""
+        # Remove a box after it passes the later cutoff (independent of detection) 
         boxes = getattr(self.conveyor, "_boxes", None)
         if not boxes:
             return
+        # Get the list of box colors
         colors = getattr(self.conveyor, "_box_colors", None)
 
         # Use the same detection X as the gripper trigger
         detect_x = self._grip_x()
-        cutoff_x = detect_x + self._despawn_offset_px  # set offset to 0 so the box disappears as soon as its touched (line 133)
+        cutoff_x = detect_x + self._despawn_offset_px  # set offset to 0 so the box disappears as soon as its touched
 
+        # Find the first box that has passed the cutoff point
         hit_index = -1
         for i, x in enumerate(boxes):
             if x >= cutoff_x:
                 hit_index = i
                 break
-
+        
+        # Remove the box and its color if a cutoff was detected
         if hit_index != -1:
             del boxes[hit_index]
             if isinstance(colors, list) and hit_index < len(colors):
                 del colors[hit_index]
             self.conveyor.update()
 
-    # --- helper to get nearest box color ---
+    # Helper to get nearest box color
     def _color_of_box_in_window(self):
-        """Return the QColor of the first box currently inside the detection window (or None)."""
+        # Return the QColor of the first box currently inside the detection window (or None) 
         boxes = getattr(self.conveyor, "_boxes", None)
         cols  = getattr(self.conveyor, "_box_colors", None)
         if not boxes or not cols:
@@ -624,7 +608,7 @@ class SortingTask(BaseTask):
 
 
     def _animate_flying_box(self, color, target_widget):
-        """Spawn a temporary box at the gripper and animate it flying into the container."""
+        # Spawn a temporary box at the gripper and animate it flying into the container 
         if not target_widget:
             return
 
@@ -652,7 +636,7 @@ class SortingTask(BaseTask):
         anim.start()
 
 
-    # ===== Click handling / event filter =====
+    # Click handling
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress:
             slot = getattr(obj, "_slot", None)
@@ -677,19 +661,19 @@ class SortingTask(BaseTask):
         w.update()
 
     def _current_selected_slot(self):
-        """Return the slot of the currently selected (held) error, if any."""
+        # Return the slot of the currently selected (held) error, if any 
         if self._selected_error is None:
             return None
         rec = self._errors.get(self._selected_error)
         return rec['current'] if rec else None
 
-        # --- Drag ghost helpers ---
+        # Drag ghost helpers
     def _start_drag_box(self, color: QColor):
-        """Spawn a ghost box inside the scene, behind the containers."""
+        # Spawn a ghost box inside the scene, behind the containers 
         if self._drag_label:
             self._drag_label.deleteLater()
 
-        lbl = QLabel(self.scene)  # parent is the scene
+        lbl = QLabel(self.scene)
         lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         lbl.setStyleSheet(
             f"background-color: {color.name()}; "
@@ -698,12 +682,12 @@ class SortingTask(BaseTask):
         )
         lbl.resize(24, 24)
         lbl.show()
-        lbl.lower()
+        lbl.lower()  # keep behind containers
 
         self._drag_label = lbl
         self._drag_color = color
 
-        # Position immediately at cursor (scene coordinates!)
+        # Position immediately at cursor (scene coordinates)
         from PyQt5 import QtGui
         pos = self.scene.mapFromGlobal(QtGui.QCursor.pos())
         lbl.move(pos.x() - 12, pos.y() - 12)
@@ -712,7 +696,7 @@ class SortingTask(BaseTask):
             self._drag_timer.start(16)
 
     def _end_drag_box(self):
-        """Remove the drag label and stop following."""
+        # Remove the drag label and stop following 
         if hasattr(self, "_drag_timer") and self._drag_timer:
             if self._drag_timer.isActive():
                 self._drag_timer.stop()
@@ -722,7 +706,7 @@ class SortingTask(BaseTask):
         self._drag_color = None
 
     def _update_drag_ghost(self):
-        """Timer tick: keep ghost glued to the cursor."""
+        # Timer tick: keep ghost glued to the cursor 
         if not self._drag_label:
             return
         from PyQt5 import QtGui
@@ -730,9 +714,9 @@ class SortingTask(BaseTask):
         self._drag_label.move(pos.x() - 12, pos.y() - 12)
         self._drag_label.lower()
 
-    # ---- badges ----
+    # Badges
     def _create_error_badges(self):
-        """Create a small colored '!' badge for each bin (initially hidden)."""
+        # Create a small colored '!' badge for each bin (initially hidden) 
         for slot, w in self._slot_to_widget.items():
             lbl = QLabel("!", w)
             lbl.setFixedSize(40, 40)
@@ -747,18 +731,17 @@ class SortingTask(BaseTask):
             self._position_badge(slot)
 
     def _position_badge(self, slot):
-        """Center the badge along the top inside the container."""
+        # Center the badge along the top inside the container 
         w = self._slot_to_widget.get(slot)
         b = self._badges.get(slot)
         if not w or not b:
             return
         x = (w.width() - b.width()) // 2
-        y = 2  # just inside the top edge
+        y = 2
         b.move(max(0, x), max(0, y))
 
     def _apply_flash_colors(self):
-        """Apply flashing borders per-bin based on oldest unresolved error, and update badges.
-           Alarm starts only if an error has been active for >=2s, and stops when all are cleared."""
+        # Apply flashing borders per-bin based on oldest unresolved error, and update badges, Alarm starts only if an error has been active for >=2s, and stops when all are cleared 
         selected_slot = self._current_selected_slot()
         oldest_age = 0.0  # track age of the oldest unresolved error
 
@@ -790,7 +773,7 @@ class SortingTask(BaseTask):
                             )
                             badge.show()
 
-                    # --- compute age of this error ---
+                    # compute age of this error
                     import time
                     started = self._error_start_times.get(head)
                     if started:
@@ -805,7 +788,7 @@ class SortingTask(BaseTask):
                 if badge:
                     badge.hide()
 
-        # --- Alarm logic (single place) ---
+        # Alarm logic
         if self._errors:
             if oldest_age >= 2.0 and not getattr(self, "_alarm_active", False):
                 self.play_sound("alarm")
@@ -820,15 +803,11 @@ class SortingTask(BaseTask):
         self._apply_flash_colors()
 
     def _on_container_clicked(self, slot):
-        # Always log the user click
-        # get_logger().log_user("Sorting", f"container_{slot}", "click", "container clicked")
-
         # === CASE 1: Not holding anything, attempt to PICK from this bin ===
         if self._selected_error is None:
             ids = self._bin_errors.get(slot, [])
             if not ids:
                 print(f"(Sorting Task: No errors in {slot} to pick up)")
-                # get_logger().log_user("Sorting", f"container_{slot}", "click", "no errors to pick up")
                 return
 
             # FIFO pick one error from the clicked bin
@@ -842,8 +821,6 @@ class SortingTask(BaseTask):
             msg = (f"Sorting Task: Picked error #{eid}: {rec['color']} currently in {slot}. "
                    f"Click the correct container ({rec['actual']}).")
             print(msg)
-            # get_logger().log_user("Sorting", f"container_{slot}", "pick",
-                                  # f"eid={eid}, color={rec['color']}, needs={rec['actual']}")
 
             # Spawn ghost box
             q = self._slot_color_map.get(rec['color'])
@@ -868,7 +845,7 @@ class SortingTask(BaseTask):
         prev = rec['current']
         new_slot = slot
 
-        # Clean up any stale membership from previous bin
+        # Remove the error ID from the previous bin if it was still listed there
         try:
             if eid in self._bin_errors.get(prev, []):
                 self._bin_errors[prev].remove(eid)
@@ -883,10 +860,7 @@ class SortingTask(BaseTask):
             self._correct_corrections += 1
             import time
             self._error_start_times.pop(eid, None)
-
             print(f"Sorting Task: Resolved error #{eid}: moved {rec['color']} to {new_slot}")
-            # get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
-                                  # f"resolved eid={eid}, color={rec['color']}")
 
             # Remove from error lists
             try:
@@ -902,10 +876,7 @@ class SortingTask(BaseTask):
             # Wrong placement — treat as permanently failed, clear the error too
             import time
             self._error_start_times.pop(eid, None)
-
             print(f"Sorting Task: Error #{eid} placed incorrectly in {new_slot} and cleared (was {rec['actual']})")
-            # get_logger().log_user("Sorting", f"container_{new_slot}", "drop",
-                                  # f"final incorrect eid={eid}, expected={rec['actual']}")
 
             # Remove error record completely
             try:
@@ -916,13 +887,11 @@ class SortingTask(BaseTask):
             if eid in self._errors:
                 del self._errors[eid]
 
-            # Play incorrect chime here
+            # Play incorrect chime
             self.play_sound("incorrect_chime")
 
-        # In either case, deselect after the drop
+        # End drag + deselect
         self._selected_error = None
-
-        # Always clear ghost after drop
         self._end_drag_box()
 
         # Stop alarm if no errors remain
@@ -937,26 +906,26 @@ class SortingTask(BaseTask):
         self._apply_flash_colors()
 
 
-    # ===== Worker signal handlers =====
+    # Worker signal handlers
     def _on_box_spawned(self, box_data):
         color = box_data["color"]
         error = box_data["error"]
 
     def _on_box_sorted(self, color, correct):
-        # color is a string like "red", "blue", etc.
+        # Only allow recognized colors to be processed
         valid = {"red", "blue", "green", "purple", "orange", "teal"}
         if color not in valid:
             return
 
         if correct:
+            # If sorting is correct, show the correct slot highlight and play correct chime
             self._present_slot_override = color
             into = color
             msg = f"Sorting Task: sorted {color} into {into} - correct"
             print(msg)
-            # get_logger().log_robot("Sorting", msg)
-            # play a "correct" sound
             self.play_sound("correct_chime")
         else:
+            # If sorting is incorrect, determine which wrong bin it was placed in
             wrong = self._present_slot_override or self._wrong_slot_for(color)
             self._present_slot_override = wrong
             into = wrong
@@ -967,14 +936,13 @@ class SortingTask(BaseTask):
             rec = {"id": eid, "color": color, "actual": color, "current": into}
             self._errors[eid] = rec
             self._bin_errors[into].append(eid)
-            # --- RECORD PICKUP TIME ---
+            # Record pickup time
             import time
-            self._error_start_times[eid] = time.time()  # timestamp in seconds
+            self._error_start_times[eid] = time.time()
             msg = f"Sorting Task: sorted {color} into {into} - error (expected {color})"
             print(msg)
-            # get_logger().log_robot("Sorting", msg)
 
-            # play only the incorrect chime ONCE here
+            # play only the incorrect chime
             self.play_sound("incorrect_chime")
 
             # Alarm will be started/stopped by _apply_flash_colors (after 2s if unresolved)
@@ -984,7 +952,7 @@ class SortingTask(BaseTask):
 
 
     def spawn_box_from_worker(self, box_data):
-        """Called when worker wants to spawn a box."""
+        # Called when worker wants to spawn a box 
         color = box_data["color"]
         error = box_data["error"]
         # Spawn the box with color and error info

@@ -7,14 +7,16 @@ from matplotlib.ticker import MultipleLocator
 import time
 
 
+# MetricsManager class handles displaying and updating live task metrics and graphs
 class MetricsManager(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        main_layout = QHBoxLayout()   # 3 columns side by side
+        # Set up main layout with three metric columns
+        main_layout = QHBoxLayout() # 3 columns side by side
         main_layout.setAlignment(Qt.AlignTop)
 
-                # --- Sorting Metrics ---
+        # Sorting Metrics section
         sorting_box = QGroupBox("Sorting Metrics")
         sorting_layout = QVBoxLayout()
 
@@ -49,7 +51,6 @@ class MetricsManager(QWidget):
         self.sort_ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, 1.17), ncol=2)
         self.sort_ax.set_ylim(0, 10)
         self.sort_ax.set_xlim(0, 30)
-        # Major and minor ticks
         self.sort_ax.yaxis.set_major_locator(MultipleLocator(5))  # 0,5,10
         self.sort_ax.yaxis.set_minor_locator(MultipleLocator(1))  # grid every 1
         self.sort_ax.xaxis.set_major_locator(MultipleLocator(10))
@@ -60,7 +61,7 @@ class MetricsManager(QWidget):
 
         sorting_box.setLayout(sorting_layout)
 
-        # --- Packaging Metrics ---
+        # Packaging Metrics section
         packaging_box = QGroupBox("Packaging Metrics")
         packaging_layout = QVBoxLayout()
 
@@ -95,7 +96,6 @@ class MetricsManager(QWidget):
         self.pack_ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, 1.17), ncol=2)
         self.pack_ax.set_ylim(0, 10)
         self.pack_ax.set_xlim(0, 30)
-        # Major and minor ticks
         self.pack_ax.yaxis.set_major_locator(MultipleLocator(5))  # 0,5,10
         self.pack_ax.yaxis.set_minor_locator(MultipleLocator(1))  # grid every 1
         self.pack_ax.xaxis.set_major_locator(MultipleLocator(10))
@@ -106,7 +106,7 @@ class MetricsManager(QWidget):
 
         packaging_box.setLayout(packaging_layout)
 
-        # --- Inspection Metrics ---
+        # Inspection Metrics section
         inspection_box = QGroupBox("Inspection Metrics")
         inspection_layout = QVBoxLayout()
 
@@ -141,7 +141,6 @@ class MetricsManager(QWidget):
         self.insp_ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, 1.17), ncol=2)
         self.insp_ax.set_ylim(0, 10)
         self.insp_ax.set_xlim(0, 30)
-        # Major and minor ticks
         self.insp_ax.yaxis.set_major_locator(MultipleLocator(5))  # 0,5,10
         self.insp_ax.yaxis.set_minor_locator(MultipleLocator(1))  # grid every 1
         self.insp_ax.xaxis.set_major_locator(MultipleLocator(10))
@@ -152,14 +151,13 @@ class MetricsManager(QWidget):
 
         inspection_box.setLayout(inspection_layout)
 
-        # Add all groups to main layout
+        # Add all group boxes to the main layout
         main_layout.addWidget(sorting_box)
         main_layout.addWidget(packaging_box)
         main_layout.addWidget(inspection_box)
-
         self.setLayout(main_layout)
 
-        # --- Internal placeholders ---
+        # Internal placeholders for all metrics
         # Sorting
         self.sort_total = 0
         self.sort_errors = 0
@@ -181,6 +179,7 @@ class MetricsManager(QWidget):
         self.insp_error_rate = 0.0
         self.insp_correction_rate = 0.0
 
+    # Update metrics dynamically for all task types
     def update_metrics(self, metrics: dict):
         """Update labels with values from a dict of metrics"""
         current_time = time.time()
@@ -357,6 +356,7 @@ class MetricsManager(QWidget):
 
             self.insp_canvas.draw()
 
+    # Reset all metrics and graphs to initial state
     def reset_metrics(self):
         """Reset all metrics to zero and update labels"""
         current_time = time.time()

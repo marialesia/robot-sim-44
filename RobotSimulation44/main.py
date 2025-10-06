@@ -20,7 +20,7 @@ def main():
     # Short alias for readability
     oc = observer_window.observer_control
 
-    # Connect signals AFTER assignment
+    # Connect signals after assignment
     oc.tasks_changed.connect(user_window.layout_controller.update_workspace)
     oc.start_pressed.connect(user_window.layout_controller.start_tasks)
     oc.complete_pressed.connect(user_window.layout_controller.complete_tasks)

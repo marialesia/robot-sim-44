@@ -22,7 +22,7 @@ class ObserverControl(QObject):
         # Create top control bar layout
         self.control_bar = QVBoxLayout()
 
-        # --- Row 0: Scenario name input ---
+        # Row 0: Scenario name input
         scenario_row = QHBoxLayout()
         scenario_row.addWidget(QLabel("Scenario Name:"))
         self.scenario_name_input = QLineEdit()
@@ -30,32 +30,34 @@ class ObserverControl(QObject):
         scenario_row.addWidget(self.scenario_name_input)
         self.control_bar.addLayout(scenario_row)
 
-        # --- Row 1: Buttons (right aligned) ---
+        # Row 1: Buttons (right aligned)
         button_row = QHBoxLayout()
         button_row.addStretch(1)
         self.start_button = QPushButton("Start")
         self.complete_button = QPushButton("Complete")
         self.stop_button = QPushButton("Stop")
-        # --- Save / Load buttons ---
+
+        # Save / Load buttons
         self.save_button = QPushButton("Save Params")
         self.load_button = QPushButton("Load Params")
-        # --- user input for time limit ---
+
+        # User input for time limit
         self.time_limit_input = QLineEdit()
         self.time_limit_input.setPlaceholderText("Time Limit")
         self.time_limit_input.setFixedWidth(70)
+
         button_row.addWidget(self.start_button)
-        # button_row.addWidget(self.complete_button)
         button_row.addWidget(self.stop_button)
         button_row.addWidget(self.save_button)
         button_row.addWidget(self.load_button)
         button_row.addWidget(self.time_limit_input)
         self.control_bar.addLayout(button_row)
 
-        # TIMER
+        # Timer label
         self.timer_label = QLabel("00:00")
         button_row.addWidget(self.timer_label)  
 
-        # --- Connection Status ---
+        # Connection Status
         self.connection_label = QLabel("Not connected")
         self.connection_label.setStyleSheet("color: red; font-weight: bold;")
         self.control_bar.addWidget(self.connection_label)
@@ -73,6 +75,7 @@ class ObserverControl(QObject):
         self.flash_count = 0
         self.flash_timer = None
 
+        # Timer setup
         self.session_timer = QTimer()
         self.session_timer.timeout.connect(self.update_timer)
         self.start_time = None
@@ -83,12 +86,13 @@ class ObserverControl(QObject):
         self.start_button.clicked.connect(self.start_timer)
         self.stop_button.clicked.connect(self.stop_timer)
 
-        # --- Row 2: Task groups side by side ---
+        # Row 2: Task groups side by side
         tasks_row = QHBoxLayout()
         tasks_row.setAlignment(Qt.AlignTop)
 
-        # --- Helper function to create slider + editable input for error rate ---
+        # Helper function to create slider + editable input for error rate
         def create_slider_with_input():
+            # Container for slider and input box
             container = QHBoxLayout()
             slider = QSlider(Qt.Horizontal)
             slider.setRange(0, 100)
@@ -102,6 +106,7 @@ class ObserverControl(QObject):
 
             # Connect slider -> input_field
             slider.valueChanged.connect(lambda val: input_field.setText(str(val)))
+
             # Connect input_field -> slider
             def text_changed():
                 try:
@@ -113,7 +118,7 @@ class ObserverControl(QObject):
             input_field.editingFinished.connect(text_changed)
             return slider, input_field, container
 
-        # Sorting group
+        # Sorting group setup
         sorting_group = QGroupBox("Sorting")
         sorting_layout = QVBoxLayout()
         sorting_layout.setSpacing(5)
@@ -138,7 +143,7 @@ class ObserverControl(QObject):
         sorting_group.setLayout(sorting_layout)
         tasks_row.addWidget(sorting_group)
 
-        # Packaging group
+        # Packaging group setup
         packaging_group = QGroupBox("Packaging")
         packaging_layout = QVBoxLayout()
         packaging_layout.setSpacing(5)
@@ -168,7 +173,7 @@ class ObserverControl(QObject):
         packaging_group.setLayout(packaging_layout)
         tasks_row.addWidget(packaging_group)
 
-        # Inspection group
+        # Inspection group setup
         inspection_group = QGroupBox("Inspection")
         inspection_layout = QVBoxLayout()
         inspection_layout.setSpacing(5)
@@ -191,7 +196,7 @@ class ObserverControl(QObject):
         self.control_bar.addLayout(tasks_row)
         parent_layout.addLayout(self.control_bar)
 
-        # --- Sound Controls group ---
+        # Sound Controls setup
         sound_group = QGroupBox("Sound Controls")
         sound_layout = QHBoxLayout()
 
@@ -218,30 +223,29 @@ class ObserverControl(QObject):
         sound_group.setLayout(sound_layout)
         self.control_bar.addWidget(sound_group)
 
-        # === Connections for checkboxes and task updates ===
+        # Connect task checkboxes to update function
         self.sorting_checkbox.stateChanged.connect(self.update_tasks)
         self.packaging_checkbox.stateChanged.connect(self.update_tasks)
         self.inspection_checkbox.stateChanged.connect(self.update_tasks)
 
-        # === Connections for start/stop buttons ===
+        # Connect start/stop buttons to emit signals
         self.start_button.clicked.connect(lambda: self.start_pressed.emit())
         self.complete_button.clicked.connect(lambda: self.complete_pressed.emit())
         self.stop_button.clicked.connect(lambda: self.stop_pressed.emit())
 
-        # === Connections for save/load buttons ===
+        # Connect save/load buttons to corresponding functions
         self.save_button.clicked.connect(self.save_parameters)
         self.load_button.clicked.connect(self.load_parameters)
 
-    # --- Connection status updater ---
+    # Update connection status text and color
     def set_connection_status(self, text, success=True):
-        """Update connection status text & colour."""
         if success:
             self.connection_label.setStyleSheet("color: green; font-weight: bold;")
         else:
             self.connection_label.setStyleSheet("color: red; font-weight: bold;")
         self.connection_label.setText(text)
 
-    # --- Task getter functions ---
+    # Update active tasks list based on checkboxes
     def update_tasks(self):
         active_tasks = []
         if self.sorting_checkbox.isChecked():
@@ -252,6 +256,7 @@ class ObserverControl(QObject):
             active_tasks.append("inspection")
         self.tasks_changed.emit(active_tasks)
 
+    # Getter methods for task parameters
     def get_sort_pace(self):
         return self.sort_pace_dropdown.currentText()
 
@@ -278,9 +283,9 @@ class ObserverControl(QObject):
 
     def get_insp_error_rate(self):
         return self.insp_error_slider.value() / 100.0
-    
+
+    # Return list of active tasks
     def get_active_tasks(self):
-        """Return list of task names that are enabled via checkboxes."""
         active = []
         if self.sorting_checkbox.isChecked():
             active.append("sorting")
@@ -290,8 +295,8 @@ class ObserverControl(QObject):
             active.append("inspection")
         return active
 
+    # Return parameters for a specific task
     def get_params_for_task(self, task_name):
-        """Return a dict of parameters for a given task name."""
         task_name = task_name.lower()
         if task_name == "sorting":
             return {
@@ -314,8 +319,8 @@ class ObserverControl(QObject):
         else:
             return {}
 
+    # Return which sounds are enabled
     def get_sounds_enabled(self):
-        """Return a dict of which sounds are enabled."""
         return {
             "conveyor": self.conveyor_checkbox.isChecked(),
             "robotic_arm": self.robotic_arm_checkbox.isChecked(),
@@ -324,7 +329,7 @@ class ObserverControl(QObject):
             "alarm": self.alarm_checkbox.isChecked()
         }
 
-    # --- TIMER METHODS ---
+    # Timer control methods
     def start_timer(self):
         if self.flash_timer:
             self.flash_timer.stop()
@@ -338,6 +343,7 @@ class ObserverControl(QObject):
         self.time_limit_input.setDisabled(True)
 
     def stop_timer(self):
+        # Stop timer and save elapsed time
         if self.running:
             self.elapsed_time += self.start_time.secsTo(QTime.currentTime())
             self.session_timer.stop()
@@ -345,6 +351,7 @@ class ObserverControl(QObject):
             self.time_limit_input.setDisabled(False)
 
     def update_timer(self):
+        # Update timer label every second and check for time limit
         if self.start_time and self.running:
             total_seconds = self.elapsed_time + self.start_time.secsTo(QTime.currentTime())
             mins, secs = divmod(total_seconds, 60)
@@ -363,10 +370,11 @@ class ObserverControl(QObject):
             except ValueError:
                 pass
 
+    # Return current timer as string
     def get_timestamp(self):
         return self.timer_label.text()
 
-    # --- SAVE / LOAD FUNCTIONS ---
+    # Save current parameters to JSON file
     def save_parameters(self):
         scenario_name = self.scenario_name_input.text().strip() or "Unnamed_Scenario"
         params = {
@@ -401,6 +409,7 @@ class ObserverControl(QObject):
                 json.dump(params, f, indent=4)
             print(f"Parameters saved to {file_path} with scenario name '{scenario_name}'")
 
+    # Load parameters from JSON file
     def load_parameters(self):
         file_path, _ = QFileDialog.getOpenFileName(None, "Load Parameters", "", "JSON Files (*.json)")
         if not file_path:
@@ -436,6 +445,7 @@ class ObserverControl(QObject):
         self.update_tasks()
         print(f"Parameters loaded from {file_path}")
 
+    # Ensure time input is formatted as mm:ss
     def format_time_input(self):
         text = self.time_limit_input.text().strip()
         if not text:
@@ -455,6 +465,7 @@ class ObserverControl(QObject):
         except ValueError:
             self.time_limit_input.setText("00:00")
 
+    # Flash timer label after timer ends
     def _flash_timer_label(self):
         if self.flash_count >= 100:
             if self.flash_timer:

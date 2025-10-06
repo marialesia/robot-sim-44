@@ -4,17 +4,12 @@ from PyQt5.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, QTimer, pyqtProperty
 
 
-# --- Conveyor ---------------------------------------------------------------
-
 class ConveyorBeltWidget(QWidget):
-    """
-    Realistic conveyor with rollers, belt gradient, treads, and rails.
-    Now includes a lightweight, non-blocking tread animation + red boxes.
-    """
+    # Realistic conveyor with rollers, belt gradient, treads, and rails. Includes non-blocking tread animation and red boxes.
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(220, 120)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # fill horizontally
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         # Per-instance palette
         self.roller_pen  = QColor(40, 40, 40)
@@ -25,22 +20,21 @@ class ConveyorBeltWidget(QWidget):
         self.rail        = QColor(120, 120, 122)
         self.tread       = QColor(90, 90, 92, 180)
 
-        # --- animation state ---
+        # Animation state
         self._belt_speed = 0.0      # pixels/second; + = move RIGHT
         self._tread_phase = 0.0     # accumulates over time
         self._belt_timer = QTimer(self)
         self._belt_timer.timeout.connect(self._tick_belt)
 
-        # --- moving boxes ---
+        # Moving boxes
         self._boxes = []            # list of x positions (float)
         self._box_colors = []       # empty list for various colours of boxes
         self._box_inset = 12        # keep boxes inside belt edges
         self._box_size = 24         # square box size in px
-        # self._box_color = QColor(200, 40, 40)
 
-    # Public API --------------------------------------------------------------
+    # Public API
     def enable_motion(self, enable: bool):
-        """Start/stop the belt tread & box animation timer."""
+        # Start or stop the belt tread and box animation timer
         if enable and not self._belt_timer.isActive():
             self._belt_timer.start(16)  # ~60 FPS
         elif not enable and self._belt_timer.isActive():
@@ -54,6 +48,7 @@ class ConveyorBeltWidget(QWidget):
         self._belt_speed = float(v)
 
     def spawn_box(self, color=None, error=False):
+        # Spawn a new box at the start of the belt
         import random
         if color is None:
             color = random.choice([
@@ -80,13 +75,12 @@ class ConveyorBeltWidget(QWidget):
         self._box_colors.append(color)
         self.update()
 
-
-    # Internals ---------------------------------------------------------------
+    # Internals
     def _tick_belt(self):
+        # Update tread animation and advance boxes
         dt = 0.016
         self._tread_phase = (self._tread_phase + self._belt_speed * dt) % 1000.0
 
-        # advance boxes
         if self._boxes:
             dx = self._belt_speed * dt
             w = self.width()
@@ -101,8 +95,9 @@ class ConveyorBeltWidget(QWidget):
             self._box_colors = next_colors
 
         self.update()
-    
+
     def paintEvent(self, e):
+        # Draw conveyor, treads, rollers, boxes, and rails
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
         margin = 12
@@ -125,7 +120,7 @@ class ConveyorBeltWidget(QWidget):
         p.setPen(QPen(QColor(20,20,20), 2))
         p.drawRoundedRect(QRectF(margin, belt_top, w - 2*margin, belt_height), 8, 8)
 
-        # Treads (animated)
+        # Treads
         p.setPen(QPen(self.tread, 1.2))
         step = 12
         phase = self._tread_phase % step
@@ -134,7 +129,7 @@ class ConveyorBeltWidget(QWidget):
         for x in range(start_x, int(w - margin), step):
             p.drawLine(x, belt_top + 4, x - 10, belt_top + belt_height - 4)
 
-        # Boxes (draw on belt, under rails)
+        # Boxes (drawn on belt, under rails)
         if self._boxes:
             box_h = min(self._box_size, max(8, belt_height - 8))
             box_w = box_h
@@ -144,8 +139,9 @@ class ConveyorBeltWidget(QWidget):
                 p.setBrush(QBrush(c))
                 p.drawRoundedRect(QRectF(x, y, box_w, box_h), 3, 3)
 
-        # Rails + bolts (on top)
-        rail_pen = QPen(self.rail, 2); p.setPen(rail_pen)
+        # Rails and bolts
+        rail_pen = QPen(self.rail, 2)
+        p.setPen(rail_pen)
         p.setBrush(Qt.NoBrush)
         p.drawLine(margin + 4, belt_top - 6, w - margin - 4, belt_top - 6)
         p.drawLine(margin + 4, belt_top + belt_height + 6, w - margin - 4, belt_top + belt_height + 6)
@@ -156,22 +152,14 @@ class ConveyorBeltWidget(QWidget):
             p.drawEllipse(QPointF(x, belt_top + belt_height + 6), 1.8, 1.8)
 
 
-
-
-# --- Robot Arm --------------------------------------------------------------
-
 class RobotArmWidget(QWidget):
-    """
-    Stylized 3-DOF industrial arm (base, upper arm, forearm, gripper),
-    facing away (upward). Per-instance pose/colours so each task can override.
-    """
+    # Stylized 3-DOF industrial arm (base, upper arm, forearm, gripper), facing away (upward). Per-instance pose/colours so each task can override.
     def __init__(self, parent=None):
         super().__init__(parent)
-        
+
         screen = QApplication.primaryScreen()
         size = screen.size()
         w = size.width()
-
         if w >= 2560:       # 1440p+
             self.setMinimumSize(220, 140)
         elif w >= 1920:     # 1080p
@@ -196,18 +184,16 @@ class RobotArmWidget(QWidget):
         self.held_box_color = QColor(200, 40, 40)
 
     def _joint(self, p, r_outer=16, r_inner=8):
+        # Draw a joint
         p.setPen(QPen(QColor(40, 40, 45), 2))
         p.setBrush(QBrush(self.c_joint)); p.drawEllipse(QPointF(0, 0), r_outer, r_outer)
         p.setBrush(QBrush(QColor(190, 190, 195))); p.setPen(Qt.NoPen)
         p.drawEllipse(QPointF(0, 0), r_inner, r_inner)
 
     def gripper_center(self):
-        """
-        Approximate the tip position of the gripper in this widget's local coordinates.
-        Uses forward kinematics with current shoulder and elbow angles.
-        """
+        # Return approximate tip position of gripper in local coordinates, uses forward kinematics with current shoulder and elbow angles
         w, h = self.width(), self.height()
-        m = 10  # margin, same as in paintEvent
+        m = 10
 
         # Base & tower geometry
         base_h = max(12, int(h * 0.08))
@@ -218,11 +204,11 @@ class RobotArmWidget(QWidget):
         origin_x = (w - base_w) / 2.0 + base_w/2.0
         origin_y = tower_rect_top
 
-        # Arm lengths (same ratios as in paintEvent)
+        # Arm lengths
         avail_up = max(30.0, origin_y - m)
         L1, L2 = max(30.0, avail_up * 0.55), max(24.0, avail_up * 0.35)
 
-        # Angles (convert to radians)
+        # Angles
         import math
         s_ang = math.radians(self.shoulder_angle)
         e_ang = math.radians(self.elbow_angle)
@@ -234,7 +220,6 @@ class RobotArmWidget(QWidget):
         y2 = y1 + L2 * math.sin(s_ang + e_ang)
 
         return QPoint(int(x2), int(y2))
-
 
     def paintEvent(self, e):
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
@@ -278,18 +263,18 @@ class RobotArmWidget(QWidget):
         p.setPen(QPen(self.c_arm_dark, 2)); p.setBrush(QBrush(self.c_arm))
         fL, fW = max(16.0, arm_t*0.9), max(4.0, arm_t*0.35)
 
-        # --- Held box (drawn before fingers so grippers stay visible)
+        # Held box (drawn before fingers so grippers stay visible)
         if getattr(self, "held_box_visible", False):
             p.save()
-            hb_len = 24.0 # OLD VALUE max(16.0, fL * 0.45)        # box length along the gripper
-            hb_thk = 24.0 # OLD VALUE max(6.0,  arm_t * 0.55)     # box thickness between fingers
-            xc = fL * 0.55                                        # position around mid-finger
+            hb_len = 24.0   # box length along the gripper
+            hb_thk = 24.0   # box thickness between fingers
+            xc = fL * 0.55  # position around mid-finger
             p.setPen(QPen(self.held_box_color.darker(200), 1))
             p.setBrush(QBrush(self.held_box_color))
             p.drawRoundedRect(QRectF(xc - hb_len/2, -hb_thk/2, hb_len, hb_thk), 3, 3)
             p.restore()
 
-        # Fingers (unchanged)
+        # Fingers
         p.save(); p.rotate(18);  p.drawRoundedRect(QRectF(0, -fW/2, fL, fW), fW/1.6, fW/1.6); p.restore()
         p.save(); p.rotate(-18); p.drawRoundedRect(QRectF(0, -fW/2, fL, fW), fW/1.6, fW/1.6); p.restore()
 
@@ -297,21 +282,14 @@ class RobotArmWidget(QWidget):
         p.drawEllipse(QPointF(0, 0), cap_r, cap_r)
         p.restore(); p.restore()
 
-
-# --- Storage Container -------------------------------------------------------
-
 class StorageContainerWidget(QWidget):
-    """
-    Simple container box: rounded rect + subtle lid seam + a few ribs.
-    Per-instance palette so each task can override.
-    """
+    # Simple container box with rounded rect, lid seam, and ribs, per-instance palette so each task can override
     def __init__(self, parent=None):
         super().__init__(parent)
-        
+
         screen = QApplication.primaryScreen()
         size = screen.size()
         w = size.width()
-
         if w >= 2560:       # 1440p+
             self.setMinimumSize(110, 110)
         elif w >= 1920:     # 1080p
@@ -328,6 +306,7 @@ class StorageContainerWidget(QWidget):
         self.rib = QColor(42, 122, 75, 120)
 
     def paintEvent(self, e):
+        # Draw the container with lid seam and ribs
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
         m = max(10, int(min(w, h) * 0.08))
@@ -350,19 +329,15 @@ class StorageContainerWidget(QWidget):
             p.drawLine(x, rib_top, x, rib_bottom)
 
 
-# --- Scene container ---------------------------------------------------------
 class BaseTask(QWidget):
-    """
-    One task’s scene with three widgets (conveyor, arm, container).
-    Uses a QGridLayout so subclasses can reposition each widget per task.
-    """
+    # One task scene with conveyor, robot arm, and storage container, uses a QGridLayout so subclasses can reposition each widget per task
     def __init__(self, task_name="Task"):
         super().__init__()
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 12, 12, 12)
         outer.setSpacing(10)
 
-        # --- Modern title ---
+        # Title
         title = QLabel(f"{task_name}")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet(
@@ -372,7 +347,7 @@ class BaseTask(QWidget):
         )
         outer.addWidget(title)
 
-        # Soft glow effect on title
+        # Soft glow effect
         from PyQt5.QtWidgets import QGraphicsDropShadowEffect
         glow = QGraphicsDropShadowEffect(self)
         glow.setBlurRadius(12)
@@ -380,7 +355,7 @@ class BaseTask(QWidget):
         glow.setColor(QColor(0, 200, 255, 150))  # cyan glow
         title.setGraphicsEffect(glow)
 
-        # --- Modern scene frame ---
+        # Scene frame
         self.scene = QFrame()
         self.scene.setObjectName("warehouseScene")
 
@@ -400,11 +375,10 @@ class BaseTask(QWidget):
             "}"
         )
 
-        # ---- dynamic minimum size by screen ----
+        # Dynamic minimum size by screen
         screen = QApplication.primaryScreen()
         size = screen.size()
         w, h = size.width(), size.height()
-
         if w >= 2560:       # 1440p or higher
             self.scene.setMinimumSize(1200, 350)
         elif w >= 1920:     # 1080p
@@ -416,17 +390,16 @@ class BaseTask(QWidget):
 
         outer.addWidget(self.scene)
 
-        # ---- Grid layout for flexible placement ----
+        # Grid layout for flexible placement
         self.grid = QGridLayout(self.scene)
         self.grid.setContentsMargins(20, 20, 20, 20)
         self.grid.setSpacing(18)
 
-        # Widgets (same instances exposed to subclasses)
+        # Widgets
         self.conveyor = ConveyorBeltWidget()
         self.conveyor.setMinimumHeight(120)
         self.conveyor.setMaximumHeight(160)
         self.conveyor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
         self.arm = RobotArmWidget()
         self.container = StorageContainerWidget()
 
@@ -435,13 +408,13 @@ class BaseTask(QWidget):
         self.grid.addWidget(self.arm,      1, 0, 1, 1, Qt.AlignLeft   | Qt.AlignBottom)
         self.grid.addWidget(self.container,1, 1, 1, 1, Qt.AlignRight  | Qt.AlignBottom)
 
-        # Stretch so columns share width / bottom row takes slack
+        # Column and row stretch
         self.grid.setColumnStretch(0, 1)
         self.grid.setColumnStretch(1, 1)
         self.grid.setRowStretch(0, 0)
         self.grid.setRowStretch(1, 1)
 
-    # --------- Per-task placement API  ----------
+    # Per-task placement API
     def set_positions(
         self,
         conveyor=None,   # dict: {row, col, rowSpan=1, colSpan=1, align=Qt.Align...}
@@ -452,6 +425,7 @@ class BaseTask(QWidget):
         spacing=None,      # int
         margins=None       # tuple(l,t,r,b)
     ):
+        # Place widgets based on provided spec
         def _place(widget, spec):
             if not spec:
                 return
@@ -482,4 +456,3 @@ class BaseTask(QWidget):
         if isinstance(margins, (list, tuple)) and len(margins) == 4:
             l, t, r, b = margins
             self.grid.setContentsMargins(int(l), int(t), int(r), int(b))
-

@@ -3,7 +3,9 @@ from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtCore import Qt
 from event_logger import get_logger 
 
+# Controls layout management and task operations between user and observer systems
 class LayoutController:
+    # Initialize layout controller and workspace area
     def __init__(self, parent_layout, task_manager, status_label=None, observer_control=None):
         self.task_manager = task_manager
         self.status_label = status_label
@@ -14,10 +16,12 @@ class LayoutController:
         self.workspace_area.setAlignment(Qt.AlignCenter)  # <-- force centering
         parent_layout.addLayout(self.workspace_area)
 
+    # Assign or update the status label
     def set_status_label(self, status_label):
         """Assign or update the status label after layout is created."""
         self.status_label = status_label
 
+    # Update the workspace with panels for active tasks
     def update_workspace(self, active_tasks):
         """Clear workspace and add panels for active tasks, stacked vertically."""
         # Fully clear current workspace (widgets AND spacers)
@@ -42,6 +46,7 @@ class LayoutController:
                 f"Active tasks: {', '.join(active_tasks) if active_tasks else 'None'}"
             )
 
+    # Start all active tasks and sync sound settings
     def start_tasks(self):
         """Start all tasks that have a 'start' method and sync sound settings."""
         sounds = {}
@@ -74,13 +79,14 @@ class LayoutController:
                 else:
                     task.start()
 
+    # Complete all tasks and save CSV event log
     def complete_tasks(self):
         """Complete all tasks that have a 'complete' method', then write CSV log."""
         for task in self.task_manager.task_instances.values():
             if hasattr(task, "complete"):
                 task.complete()
 
-        # --- Dump buffered events to CSV on Complete --- 
+        # Dump buffered events to CSV on Complete
         path = get_logger().dump_csv()
         if self.status_label:
             if path:
@@ -88,13 +94,14 @@ class LayoutController:
             else:
                 self.status_label.setText("Complete.")
 
+    # Stop all tasks and save CSV event log
     def stop_tasks(self):
         """Stop all tasks that have a 'stop' method', then write CSV log."""
         for task in self.task_manager.task_instances.values():
             if hasattr(task, "stop"):
                 task.stop()
 
-        # --- Dump buffered events to CSV on Stop --- 
+        # Dump buffered events to CSV on Stop 
         path = get_logger().dump_csv()
         if self.status_label:
             if path:

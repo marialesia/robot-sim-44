@@ -15,17 +15,17 @@ class PackagingTask(BaseTask):
     def __init__(self):
         super().__init__(task_name="Packaging")
 
-        # ---- Audio ----
+        # Audio
         self.audio = AudioManager()
-        self._alarm_active = False  # track alarm state like SortingTask
+        self._alarm_active = False  # track alarm state
 
-        # ---- Robot arm visuals ----
+        # Robot arm visuals
         self.arm.shoulder_angle = -90
         self.arm.elbow_angle = 0
         self.arm.c_arm = QColor("#8e44ad")
         self.arm.c_arm_dark = QColor("#6d2e8a")
 
-        # ---- Layout (match SortingTask’s overall placement) ----
+        # Layout
         self.set_positions(
             conveyor=dict(row=0, col=0, colSpan=6, align=Qt.AlignTop),
             arm=dict(row=0, col=0, colSpan=6, align=Qt.AlignHCenter | Qt.AlignBottom),
@@ -34,7 +34,7 @@ class PackagingTask(BaseTask):
             spacing=18
         )
 
-        # --- Style helper (same palette as Sorting) ---
+        # Style helper
         def _apply_style_by_color(w, color: str):
             c = (color or "").lower()
             if c == "red":
@@ -76,7 +76,7 @@ class PackagingTask(BaseTask):
 
         self._apply_style_by_color = _apply_style_by_color
 
-        # --- Remove BaseTask's default single container (prevents “stray” widget) ---
+        # Remove BaseTask's default single container (prevents “stray” widget)
         if hasattr(self, "container") and self.container is not None:
             try:
                 self.grid.removeWidget(self.container)
@@ -87,7 +87,7 @@ class PackagingTask(BaseTask):
             self.container.deleteLater()
             self.container = None
 
-        # ---- Build all six containers once (like SortingTask) ----
+        # Build all six containers once
         def _make_container(color_name: str):
             w = StorageContainerWidget()
             self._apply_style_by_color(w, color_name)
@@ -138,7 +138,7 @@ class PackagingTask(BaseTask):
         self._all_colors = ["red", "blue", "green", "purple", "orange", "teal"]
         self._all = {c: _make_container(c) for c in self._all_colors}
 
-        # Group all containers into one tight horizontal row (centered), like SortingTask
+        # Group all containers into one tight horizontal row (centered)
         self._row = QWidget()
         self._row_layout = QHBoxLayout(self._row)
         self._row_layout.setContentsMargins(0, 0, 0, 0)
@@ -207,7 +207,7 @@ class PackagingTask(BaseTask):
         # Held box metadata
         self._held_intended_color = None
 
-        # === per-box intended-color ring, aligned with conveyor _boxes ===
+        # per-box intended-color ring, aligned with conveyor _boxes
         self._intended_colors = []  # list[str]; same length/order as self.conveyor._boxes/_box_colors
 
         # metrics for corrections
@@ -224,7 +224,7 @@ class PackagingTask(BaseTask):
             rec["widget"].update()
             self._position_label(rec)
 
-    # ---------- UI helpers ----------
+    # UI helpers
     def _position_label(self, rec):
         w = rec["widget"]; lbl = rec["label"]
         x = (w.width() - lbl.width()) // 2
@@ -242,7 +242,7 @@ class PackagingTask(BaseTask):
         rec["label"].setText(f"{rec['count']}/{rec['capacity']}")
         self._position_label(rec)
 
-    # ---------- Error visuals + alarm ----------
+    # Error visuals + alarm
     def _apply_error_visuals(self):
         for i, rec in enumerate(self._containers):
             w = rec["widget"]
@@ -294,7 +294,7 @@ class PackagingTask(BaseTask):
         self._flash_on = not self._flash_on
         self._apply_error_visuals()
 
-    # ---------- Alarm helpers ----------
+    # Alarm helpers
     def _any_error_and_oldest_age(self):
         oldest = 0.0
         found = False
@@ -324,7 +324,7 @@ class PackagingTask(BaseTask):
             except Exception:
                 pass
 
-    # ---------- Spawning & batches (batch = spawn planner ONLY) ----------
+    # Spawning & batches (batch = spawn planner ONLY)
     def _count_boxes_on_belt(self, color: str) -> int:
         cols = getattr(self.conveyor, "_box_colors", None)
         if not isinstance(cols, list):
@@ -333,7 +333,7 @@ class PackagingTask(BaseTask):
         return sum(1 for c in cols if norm(c) == color)
 
     def _need_for_color(self, color: str) -> int:
-        """How many more boxes of this color we still need to spawn to fill its container."""
+        # How many more boxes of this color we still need to spawn to fill its container 
         rec = next((r for r in self._containers
                     if r.get("color") == color and r["widget"].isVisible()), None)
         if not rec:
@@ -346,7 +346,7 @@ class PackagingTask(BaseTask):
         return max(0, cap - cnt - on_belt)
 
     def _pick_next_batch_color(self) -> str:
-        """Pick randomly among colors that still need boxes."""
+        # Pick randomly among colors that still need boxes 
         candidates = []
         for rec in self._containers:
             if not rec["widget"].isVisible():
@@ -360,7 +360,7 @@ class PackagingTask(BaseTask):
         return random.choice(candidates)
 
     def _ensure_batch(self):
-        """Ensure there is a running batch; if none, pick a random color that still needs boxes."""
+        # Ensure there is a running batch; if none, pick a random color that still needs boxes 
         # If current batch color no longer needs boxes, end it
         if self._batch_active and self._need_for_color(self._batch_color) <= 0:
             self._batch_active = False
@@ -395,8 +395,7 @@ class PackagingTask(BaseTask):
             pass
 
     def _drip_spawn_tick(self):
-        """Spawn boxes for the current batch color; with probability=error_rate,
-        spawn a different (visible) color. Also snapshot intended_color per box."""
+        # Spawn boxes for the current batch color; with probability=error_rate, spawn a different (visible) color. Also snapshot intended_color per box 
         if not self._batch_active or not self._batch_color:
             self._ensure_batch()
             return
@@ -428,7 +427,7 @@ class PackagingTask(BaseTask):
         # Put the box on the belt (actual_color)
         self.conveyor.spawn_box(color=spawn_color)
 
-        # === append intended_color aligned with the newly spawned box ===
+        # append intended_color aligned with the newly spawned box
         self._intended_colors.append(intended_color)
 
         # Informational decrement; actual "need" recalculated each tick
@@ -443,7 +442,7 @@ class PackagingTask(BaseTask):
                 self._box_timer.stop()
             QTimer.singleShot(self._batch_gap_ms, self._ensure_batch)
 
-    # ---------- Normalize color helper ----------
+    # Normalize color helper
     def _normalize_box_color(self, c):
         if isinstance(c, str):
             s = c.strip().lower()
@@ -462,7 +461,7 @@ class PackagingTask(BaseTask):
         }
         return hex_map.get(hexv)
 
-    # ---------- Worker hooks ----------
+    # Worker hooks
     def spawn_box_from_worker(self, box_data=None):
         # Heartbeat; keep batches healthy
         self._ensure_batch()
@@ -471,7 +470,7 @@ class PackagingTask(BaseTask):
         # With direct-to-color placement, we manage fades per-container locally.
         self._ensure_batch()
 
-    # ---------- Animate + pack ----------
+    # Animate + pack
     def _animate_flying_box(self, color, target_widget):
         if not target_widget:
             return
@@ -495,7 +494,7 @@ class PackagingTask(BaseTask):
         anim.finished.connect(box.deleteLater)
         anim.start()
 
-    # === helpers to find box index in grip window, and keep lists in sync ===
+    # helpers to find box index in grip window, and keep lists in sync
     def _index_of_box_in_window(self):
         boxes = getattr(self.conveyor, "_boxes", None)
         if not boxes:
@@ -514,7 +513,7 @@ class PackagingTask(BaseTask):
         return cols[idx]
 
     def _on_item_packed(self):
-        """Place by intended color (snapshotted at spawn). Error if actual != intended."""
+        # Place by intended color (snapshotted at spawn). Error if actual != intended 
         if not self._containers:
             return
 
@@ -603,9 +602,9 @@ class PackagingTask(BaseTask):
         # Re-evaluate batches
         self._ensure_batch()
 
-    # ---------- Requeue SAME color after fade ----------
+    # Requeue SAME color after fade
     def _requeue_same_color(self, rec, was_front=False):
-        """Reset the same record in-place (do NOT move its position). Re-roll capacity each time."""
+        # Reset the same record in-place (do NOT move its position). Re-roll capacity each time 
         limit = getattr(self, "_limit_str", None) or getattr(self.worker, "limit", "4 - 6")
         rec["capacity"] = PackagingWorker.pick_capacity(limit)
 
@@ -637,7 +636,7 @@ class PackagingTask(BaseTask):
         # After a bin resets, reassess batches
         self._ensure_batch()
 
-    # ---------- Fade helpers ----------
+    # Fade helpers
     def _begin_fade_and_shift_front(self):
         if not self._containers:
             return
@@ -706,9 +705,9 @@ class PackagingTask(BaseTask):
         anim.finished.connect(_finished)
         anim.start()
 
-    # ---------- Cancel fade on click when errored ----------
+    # Cancel fade on click when errored
     def _cancel_fade(self, rec):
-        """Stop an in-progress fade without triggering its finished handler."""
+        # Stop an in-progress fade without triggering its finished handler 
         if not rec or not rec.get("fading"):
             return
         anim = rec.get("anim")
@@ -731,7 +730,7 @@ class PackagingTask(BaseTask):
             w.show()
         self._apply_error_visuals()
 
-    # ---------- Event filter ----------
+    # Event filter
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Resize:
             for rec in self._all.values():
@@ -759,12 +758,10 @@ class PackagingTask(BaseTask):
 
         return super().eventFilter(obj, event)
 
-    # ---------- Smart-fix (two-click: pick then place) ----------
     def _smart_fix_pick_or_place(self, clicked_rec):
-        """Two-click 'pick then place' fix:
-           1) Click errored bin to pick first wrong colour (shows drag ghost)
-           2) Click destination bin of that colour to move one unit
-        """
+        # Two-click 'pick then place':
+        #   1) Click errored bin to pick first wrong colour (shows drag ghost)
+        #   2) Click destination bin of that colour to move one unit
         def _ghost_qcolor(name: str) -> QColor:
             return (QColor("#c82828") if name == "red"
                     else QColor("#2b4a91") if name == "blue"
@@ -876,7 +873,7 @@ class PackagingTask(BaseTask):
         if self.worker:
             self.worker.rearm_fade()
 
-    # --- Drag ghost helpers ---
+    # Drag ghost helpers
     def _start_drag_box(self, color: QColor):
         if self._drag_label:
             self._drag_label.deleteLater()
@@ -920,7 +917,7 @@ class PackagingTask(BaseTask):
         w, h = self._drag_label.width(), self._drag_label.height()
         self._drag_label.move(scene_pos.x() - w // 2, scene_pos.y() - h // 2)
 
-    # ---------- Metrics pipe ----------
+    # Metrics pipe
     def _on_metrics_live(self, metrics):
         metrics['pack_correction_rate'] = (
             (self._correct_corrections / self._total_corrections) * 100
@@ -943,7 +940,7 @@ class PackagingTask(BaseTask):
         if client:
             client.send({"command": "metrics", "data": metrics})
 
-    # ---------- Arm poses ----------
+    # Arm poses
     def _pose_home(self):    return (-90.0, 0.0)
     def _pose_prep(self):    return (-92.0, -12.0)
     def _pose_pick(self):    return (-110.0, -95.0)
@@ -961,7 +958,7 @@ class PackagingTask(BaseTask):
         return poses.get(slot, self._pose_lift())
 
 
-    # ---------- FSM plumbing ----------
+    # FSM plumbing
     def _set_arm(self, shoulder, elbow):
         self.arm.shoulder_angle = float(shoulder)
         self.arm.elbow_angle = float(elbow)
@@ -1006,7 +1003,7 @@ class PackagingTask(BaseTask):
                 except Exception:
                     pass
 
-                # === SNAPSHOT actual + intended at pick ===
+                # SNAPSHOT actual + intended at pick
                 idx = self._index_of_box_in_window()
                 if idx != -1:
                     actual_c = self._actual_color_at_index(idx)
@@ -1047,7 +1044,7 @@ class PackagingTask(BaseTask):
             elif self._pick_state == "idle_pause":
                 self._pick_state = "idle"
 
-    # ---------- Belt/box helpers ----------
+    # Belt/box helpers
     def _grip_x(self):
         return self.conveyor.width() * 0.44
 
@@ -1074,7 +1071,7 @@ class PackagingTask(BaseTask):
             del boxes[hit_index]
             if isinstance(colors, list) and hit_index < len(colors):
                 del colors[hit_index]
-            # === keep intended list in sync ===
+            # keep intended list in sync
             if 0 <= hit_index < len(self._intended_colors):
                 del self._intended_colors[hit_index]
             self.conveyor.update()
@@ -1090,7 +1087,7 @@ class PackagingTask(BaseTask):
                     return cols[i]
         return None
 
-    # ---------- Lifecycle ----------
+    # Lifecycle
     def start(self, pace=None, error_rate=None, limit="4 - 6", bin_count=None):
         if not getattr(self, "enabled", True):
             return
@@ -1111,7 +1108,7 @@ class PackagingTask(BaseTask):
         interval = spacing_map.get(pace, 500)
         self._box_timer.setInterval(interval)
 
-        # EXACTLY like SortingTask: decide slot_order from bin_count, then setVisible
+        # Decide slot_order from bin_count, then setVisible
         bc = int(bin_count) if bin_count is not None else 6
         if bc >= 6:
             slot_order = ["red", "blue", "green", "purple", "orange", "teal"]
@@ -1304,7 +1301,7 @@ class PackagingTask(BaseTask):
             pass
         print("Packaging metrics:", metrics)
 
-    # ---------- Sound ----------
+    # Sound
     def play_sound(self, sound_name):
         sounds_enabled = getattr(self, "sounds_enabled", {}) or {}
         if sound_name == "conveyor" and sounds_enabled.get("conveyor", False):
