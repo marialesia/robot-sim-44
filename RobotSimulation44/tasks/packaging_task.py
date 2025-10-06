@@ -1249,6 +1249,13 @@ class PackagingTask(BaseTask):
         self._total_corrections = 0
         self._correct_corrections = 0
 
+        # reset counts/caps for visible containers
+        for rec in self._containers:
+            rec["widget"].border = rec.get("orig_border", rec["widget"].border)
+            if rec.get("badge"):
+                rec["badge"].hide()
+            self._update_label(rec)
+
     def stop(self):
         self.conveyor.enable_motion(False)
         if self._box_timer.isActive():
@@ -1311,6 +1318,13 @@ class PackagingTask(BaseTask):
         # Reset correction counters
         self._total_corrections = 0
         self._correct_corrections = 0
+
+        # reset counts/caps for visible containers
+        for rec in self._containers:
+            rec["widget"].border = rec.get("orig_border", rec["widget"].border)
+            if rec.get("badge"):
+                rec["badge"].hide()
+            self._update_label(rec)
 
     def _on_metrics(self, metrics):
         try:
