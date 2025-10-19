@@ -333,9 +333,8 @@ class PackagingTask(BaseTask):
         return sum(1 for c in cols if norm(c) == color)
 
     def _need_for_color(self, color: str) -> int:
-        # How many more boxes of this color we still need to spawn to fill its container 
-        rec = next((r for r in self._containers
-                    if r.get("color") == color and r["widget"].isVisible()), None)
+        # How many more boxes of this color we still need to spawn to fill its container
+        rec = next((r for r in self._containers if r.get("color") == color), None)
         if not rec:
             return 0
         cap = int(rec.get("capacity", 0))
@@ -345,19 +344,18 @@ class PackagingTask(BaseTask):
         on_belt = self._count_boxes_on_belt(color)
         return max(0, cap - cnt - on_belt)
 
+
     def _pick_next_batch_color(self) -> str:
-        # Pick randomly among colors that still need boxes 
+        # Pick randomly among colors (from active container list) that still need boxes
         candidates = []
         for rec in self._containers:
-            if not rec["widget"].isVisible():
-                continue
             color = rec.get("color")
-            need = self._need_for_color(color)
-            if need > 0:
+            if self._need_for_color(color) > 0:
                 candidates.append(color)
         if not candidates:
             return None
         return random.choice(candidates)
+
 
     def _ensure_batch(self):
         # Ensure there is a running batch; if none, pick a random color that still needs boxes 
@@ -377,8 +375,10 @@ class PackagingTask(BaseTask):
         # Pick a new batch color that needs boxes
         nxt = self._pick_next_batch_color()
         if not nxt:
-            if self._box_timer.isActive():
-                self._box_timer.stop()
+            # No candidates yet; keep the timer running so we retry soon.
+            # (Widgets may not report visible yet; capacities may be reinitialized, etc.)
+            if not self._box_timer.isActive():
+                self._box_timer.start()
             return
 
         need = self._need_for_color(nxt)
@@ -419,8 +419,8 @@ class PackagingTask(BaseTask):
 
         # With probability error_rate, choose a different visible color (not intended)
         if self.worker and random.random() < float(self.worker.error_rate or 0.0):
-            visible = [r["color"] for r in self._containers if r["widget"].isVisible()]
-            wrong_choices = [c for c in visible if c != intended_color]
+            active_colors = [r["color"] for r in self._containers]
+            wrong_choices = [c for c in active_colors if c != intended_color]
             if wrong_choices:
                 spawn_color = random.choice(wrong_choices)
 
@@ -1107,6 +1107,10 @@ class PackagingTask(BaseTask):
         spacing_map = {"slow": 3000, "medium": 2000, "fast": 1000}
         interval = spacing_map.get(pace, 500)
         self._box_timer.setInterval(interval)
+
+        # --- Force the drip timer on ---
+        if not self._box_timer.isActive():
+            self._box_timer.start()
 
         # Decide slot_order from bin_count, then setVisible
         bc = int(bin_count) if bin_count is not None else 6

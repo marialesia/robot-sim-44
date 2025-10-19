@@ -79,6 +79,7 @@ class ConveyorBeltWidget(QWidget):
     def _tick_belt(self):
         # Update tread animation and advance boxes
         dt = 0.016
+
         self._tread_phase = (self._tread_phase + self._belt_speed * dt) % 1000.0
 
         if self._boxes:
